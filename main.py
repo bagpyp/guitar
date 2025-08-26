@@ -33,12 +33,12 @@ XYZ_BASE = ["X", "X", "X", "Y", "Y", "Z", "Z"]  # len = 7
 # Base pattern: X X X Y Y Z Z (indices 0 1 2 3 4 5 6)
 MODE_TO_START = {
     "Ionian": 1,      # Start at idx 1 → X X Y Y Z Z
-    "Dorian": 2,      # Start at idx 2 → X Y Y Z Z X
-    "Phrygian": 3,    # Start at idx 3 → Y Y Z Z X X
-    "Lydian": 4,      # Start at idx 4 → Y Z Z X X X
-    "Mixolydian": 5,  # Start at idx 5 → Z Z X X X Y
-    "Aeolian": 6,     # Start at idx 6 → Z X X X Y Y
-    "Locrian": 0      # Start at idx 0 → X X X Y Y Z
+    "Dorian": 6,      # Start at idx 6 → Z X X X Y Y
+    "Phrygian": 4,    # Start at idx 4 → Y Z Z X X X
+    "Lydian": 2,      # Start at idx 2 → X Y Y Z Z X
+    "Mixolydian": 0,  # Start at idx 0 → X X X Y Y Z
+    "Aeolian": 5,     # Start at idx 5 → Z Z X X X Y
+    "Locrian": 3      # Start at idx 3 → Y Y Z Z X X
 }
 
 WINDOW_LEN = 6
