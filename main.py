@@ -368,7 +368,7 @@ def main():
         # Generate random practice parameters
         mode = random.choice(MODES)
         note = random.choice(NOTE_NAMES_SHARP)
-        target_fret = random.randint(1, 20)
+        target_fret = random.randint(1, 12)
         
         # Run interactive practice session
         continue_practicing = interactive_practice_session(mode, note, target_fret, fretboard, args)
