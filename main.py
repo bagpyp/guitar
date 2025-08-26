@@ -9,29 +9,39 @@ Run:
   python main.py
 
 Optional flags:
-  --seed N    Use fixed random seed for reproducible sequences
-  --debug     Show internal pitch calculations
+  --seed N        Use fixed random seed for reproducible sequences
+  --debug         Show internal pitch calculations
+  --show-xyz      Show 3NPS XYZ layout after Answer 1
+  --emit-json     Output JSON data for UI integration
 """
 
 import random
 import sys
 import argparse
+import json
 
 
 # Constants
 NOTE_NAMES_SHARP = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 MODES = ["Ionian", "Dorian", "Phrygian", "Lydian", "Mixolydian", "Aeolian", "Locrian"]
 
-# XYZ pattern codes for each mode
-MODE_XYZ = {
-    "Ionian": "XXYYZZ",
-    "Dorian": "ZXXXYY", 
-    "Phrygian": "YZZXXX",
-    "Lydian": "XYYZZX",
-    "Mixolydian": "XXXYYZ",
-    "Aeolian": "ZZXXXY",
-    "Locrian": "YYZZXX"
+# 3NPS XYZ Pattern Mechanics (corrected mapping)
+# Base circular pattern
+XYZ_BASE = ["X", "X", "X", "Y", "Y", "Z", "Z"]  # len = 7
+
+# Mode to start index in circular base (for 6-symbol window)
+# Base pattern: X X X Y Y Z Z (indices 0 1 2 3 4 5 6)
+MODE_TO_START = {
+    "Ionian": 1,      # Start at idx 1 → X X Y Y Z Z
+    "Dorian": 2,      # Start at idx 2 → X Y Y Z Z X
+    "Phrygian": 3,    # Start at idx 3 → Y Y Z Z X X
+    "Lydian": 4,      # Start at idx 4 → Y Z Z X X X
+    "Mixolydian": 5,  # Start at idx 5 → Z Z X X X Y
+    "Aeolian": 6,     # Start at idx 6 → Z X X X Y Y
+    "Locrian": 0      # Start at idx 0 → X X X Y Y Z
 }
+
+WINDOW_LEN = 6
 
 # Mode offsets for parent major calculation
 # These represent semitones to subtract from mode tonic to get major key tonic
@@ -139,10 +149,90 @@ def string_index_to_ordinal(string_idx: int) -> str:
     return ordinals[string_idx]
 
 
+def xyz_window_for_mode(mode: str) -> list:
+    """Generate the 6-symbol XYZ window for a given mode"""
+    start = MODE_TO_START[mode]
+    return [XYZ_BASE[(start + i) % 7] for i in range(WINDOW_LEN)]
+
+
+def get_xyz_display_string(mode: str) -> str:
+    """Get the display string for XYZ pattern (for backward compatibility)"""
+    window = xyz_window_for_mode(mode)
+    return ''.join(window)
+
+
+def plan_xyz_positions(mode: str, start_string_idx: int, start_fret: int) -> list:
+    """
+    Plan 3NPS positions for all 6 strings starting from a given string/fret.
+    
+    Returns [(string_idx, fret, symbol)], from low to high strings (6→1).
+    Applies −1 fret shifts:
+      - whenever symbol[i-1] == 'X' and symbol[i] == 'Y'
+      - whenever crossing from string 3 → 2 (G→B)
+    """
+    symbols = xyz_window_for_mode(mode)
+    plan = []
+    
+    # We need to build the full pattern for all 6 strings
+    # Starting from string 6 (index 0) to string 1 (index 5)
+    # But we know the position of our starting note
+    
+    # First, figure out where in the pattern our starting string falls
+    # String indices: 0=6th, 1=5th, 2=4th, 3=3rd, 4=2nd, 5=1st
+    # Pattern indices: 0=6th string symbol, 1=5th string symbol, etc.
+    
+    # Calculate fret positions for all strings
+    frets: list = [None] * 6
+    frets[start_string_idx] = start_fret
+    
+    # Work backwards from start_string to string 6
+    current_fret = start_fret
+    for i in range(start_string_idx - 1, -1, -1):
+        # Check if we need to apply shifts going backwards
+        # Going from string i+1 to string i (backward)
+        prev_symbol = symbols[i + 1]
+        curr_symbol = symbols[i]
+        
+        # Reverse of X→Y shift: Y→X means +1 fret
+        if prev_symbol == 'Y' and curr_symbol == 'X':
+            current_fret += 1
+            
+        # Reverse of G→B shift: B→G (index 4→3) means +1 fret
+        if i == 3 and (i + 1) == 4:
+            current_fret += 1
+            
+        frets[i] = current_fret
+    
+    # Work forwards from start_string to string 1
+    current_fret = start_fret
+    for i in range(start_string_idx + 1, 6):
+        # Apply normal forward shifts
+        prev_symbol = symbols[i - 1]
+        curr_symbol = symbols[i]
+        
+        # X → Y transition shift
+        if prev_symbol == 'X' and curr_symbol == 'Y':
+            current_fret -= 1
+        
+        # G → B string shift (indices 3 → 4)
+        if (i - 1) == 3 and i == 4:
+            current_fret -= 1
+        
+        frets[i] = current_fret
+    
+    # Build the plan
+    for i in range(6):
+        plan.append((i, frets[i], symbols[i]))
+    
+    return plan
+
+
 def main():
     parser = argparse.ArgumentParser(description="Guitar Scale Practice App")
     parser.add_argument("--seed", type=int, help="Random seed for reproducible sequences")
     parser.add_argument("--debug", action="store_true", help="Show internal pitch calculations")
+    parser.add_argument("--show-xyz", action="store_true", help="Show 3NPS XYZ layout after Answer 1")
+    parser.add_argument("--emit-json", action="store_true", help="Output JSON data for UI integration")
     args = parser.parse_args()
     
     if args.seed is not None:
@@ -159,7 +249,7 @@ def main():
         
         # Display the challenge
         print(f"\nMode: {mode} | Note: {note} | Target fret: {target_fret}")
-        print(f"XYZ: {MODE_XYZ[mode]}")
+        print(f"XYZ: {get_xyz_display_string(mode)}")
         
         # Wait for first reveal
         wait_for_input()
@@ -171,6 +261,48 @@ def main():
             )
             ordinal_string = string_index_to_ordinal(string_idx)
             print(f"\nAnswer 1: {ordinal_string} string ({open_string_name}), {best_fret}{'st' if best_fret == 1 else 'nd' if best_fret == 2 else 'rd' if best_fret == 3 else 'th'} fret")
+            
+            # Show XYZ layout if requested
+            if args.show_xyz:
+                positions = plan_xyz_positions(mode, string_idx, best_fret)
+                print("\n3NPS/XYZ layout (low→high):")
+                
+                # Display in two rows for readability
+                row1 = []
+                row2 = []
+                for pos_idx, (s_idx, fret, symbol) in enumerate(positions):
+                    ordinal = string_index_to_ordinal(s_idx)
+                    string_name = STRING_NAMES[s_idx]
+                    if pos_idx < 3:
+                        row1.append(f"{ordinal[0]}({string_name}): {symbol} @ {fret}")
+                    else:
+                        row2.append(f"{ordinal[0]}({string_name}): {symbol} @ {fret}")
+                
+                print("  " + "  ".join(row1))
+                print("  " + "  ".join(row2))
+                
+                # Note if shifts were applied
+                window = xyz_window_for_mode(mode)
+                has_xy_shift = any(window[i-1] == 'X' and window[i] == 'Y' for i in range(1, 6))
+                if has_xy_shift:
+                    print("  (shifts: X→Y and G→B applied as needed)")
+            
+            # Emit JSON if requested
+            if args.emit_json:
+                positions = plan_xyz_positions(mode, string_idx, best_fret)
+                json_data = {
+                    "mode": mode,
+                    "tonic": note,
+                    "start_note": {"string": string_idx + 1, "fret": best_fret},  # Convert to 1-based for UI
+                    "window": xyz_window_for_mode(mode),
+                    "positions": [
+                        {"string": s_idx + 1, "fret": fret, "symbol": symbol}  # Convert to 1-based
+                        for s_idx, fret, symbol in positions
+                    ]
+                }
+                print("\nJSON output:")
+                print(json.dumps(json_data, indent=2))
+                
         except ValueError as e:
             print(f"Error: {e}")
             continue
