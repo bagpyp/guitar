@@ -2,15 +2,13 @@
 """
 Test XYZ pattern mappings for all modes.
 """
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
+import pytest
 from main import get_xyz_display_string
 
 
-def test_xyz_patterns():
-    """Test that XYZ patterns match the expected mapping."""
+class TestXYZPatterns:
+    """Test XYZ pattern mappings for all modes."""
+    
     expected_patterns = {
         "Ionian": "XXYYZZ",
         "Dorian": "ZXXXYY", 
@@ -21,25 +19,41 @@ def test_xyz_patterns():
         "Locrian": "YYZZXX"
     }
     
-    print("Testing XYZ patterns:")
-    all_passed = True
+    @pytest.mark.parametrize("mode,expected", expected_patterns.items())
+    def test_individual_xyz_pattern(self, mode, expected):
+        """Test individual XYZ pattern for each mode."""
+        actual = get_xyz_display_string(mode)
+        assert actual == expected, f"Mode {mode}: expected {expected}, got {actual}"
+    
+    def test_all_xyz_patterns(self):
+        """Test that all XYZ patterns match the expected mapping."""
+        for mode, expected in self.expected_patterns.items():
+            actual = get_xyz_display_string(mode)
+            assert actual == expected, f"Mode {mode}: expected {expected}, got {actual}"
+
+
+def test_xyz_patterns_standalone():
+    """Standalone test function for compatibility."""
+    expected_patterns = {
+        "Ionian": "XXYYZZ",
+        "Dorian": "ZXXXYY", 
+        "Phrygian": "YZZXXX",
+        "Lydian": "XYYZZX",
+        "Mixolydian": "XXXYYZ",
+        "Aeolian": "ZZXXXY",
+        "Locrian": "YYZZXX"
+    }
     
     for mode, expected in expected_patterns.items():
         actual = get_xyz_display_string(mode)
-        status = "✓" if actual == expected else "✗"
-        print(f"{status} {mode:12}: expected {expected}, got {actual}")
-        if actual != expected:
-            all_passed = False
-    
-    print()
-    if all_passed:
-        print("✓ All XYZ patterns are correct!")
-        return True
-    else:
-        print("✗ Some XYZ patterns are incorrect!")
-        return False
+        assert actual == expected, f"Mode {mode}: expected {expected}, got {actual}"
 
 
 if __name__ == "__main__":
-    success = test_xyz_patterns()
-    sys.exit(0 if success else 1)
+    # Run with pytest if available, otherwise run standalone
+    try:
+        import pytest
+        pytest.main([__file__, "-v"])
+    except ImportError:
+        test_xyz_patterns_standalone()
+        print("✓ All XYZ patterns are correct!")
