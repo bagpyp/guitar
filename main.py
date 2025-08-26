@@ -134,13 +134,125 @@ def find_best_position(note: str, target_fret: int, fretboard: dict, debug=False
     return string_idx, open_string_name, fret
 
 
-def wait_for_input():
-    """Wait for Space or Enter key"""
-    try:
-        input("(Press Space/Enter to continue...)")
-    except KeyboardInterrupt:
-        print("\nGoodbye!")
-        sys.exit(0)
+def get_ordinal_suffix(number):
+    """Get ordinal suffix for a number (1st, 2nd, 3rd, etc.)"""
+    if 10 <= number % 100 <= 20:
+        suffix = 'th'
+    else:
+        suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(number % 10, 'th')
+    return suffix
+
+
+def clear_screen():
+    """Clear the terminal screen"""
+    import os
+    os.system('cls' if os.name == 'nt' else 'clear')
+
+
+def display_challenge_info(mode, note, target_fret, show_key=False, show_position=False, show_shape=False, fretboard=None, args=None):
+    """Display challenge information with optional answers"""
+    clear_screen()
+    print("=" * 50)
+    print("GUITAR SCALE PRACTICE")
+    print("=" * 50)
+    print(f"\nChallenge: {mode} mode | Note: {note} | Target fret: {target_fret}")
+    print("\nControls:")
+    print("  [k] Show key    [p] Show position    [s] Show shape")
+    print("  [Enter] New challenge    [q] Quit")
+    
+    answers_shown = []
+    
+    # Show key if requested
+    if show_key:
+        parent_key = parent_major(mode, note)
+        print(f"\nKey: You are playing in the key of {parent_key}")
+        answers_shown.append("key")
+    
+    # Show position if requested  
+    if show_position and fretboard:
+        try:
+            string_idx, open_string_name, best_fret = find_best_position(
+                note, target_fret, fretboard, debug=args.debug if args else False
+            )
+            ordinal_string = string_index_to_ordinal(string_idx)
+            suffix = get_ordinal_suffix(best_fret)
+            print(f"\nPosition: {ordinal_string} string ({open_string_name}), {best_fret}{suffix} fret")
+            answers_shown.append("position")
+        except ValueError as e:
+            print(f"\nError finding position: {e}")
+    
+    # Show shape if requested
+    if show_shape and fretboard:
+        try:
+            string_idx, open_string_name, best_fret = find_best_position(
+                note, target_fret, fretboard, debug=args.debug if args else False
+            )
+            print(f"\nShape: {get_xyz_display_string(mode)}")
+            
+            positions = plan_xyz_positions(mode, string_idx, best_fret)
+            print("\n3NPS/XYZ layout (low→high):")
+            
+            # Display in two rows for readability
+            row1 = []
+            row2 = []
+            for pos_idx, (s_idx, fret, symbol) in enumerate(positions):
+                ordinal = string_index_to_ordinal(s_idx)
+                string_name = STRING_NAMES[s_idx]
+                if pos_idx < 3:
+                    row1.append(f"{ordinal[0]}({string_name}): {symbol} @ {fret}")
+                else:
+                    row2.append(f"{ordinal[0]}({string_name}): {symbol} @ {fret}")
+            
+            print("  " + "  ".join(row1))
+            print("  " + "  ".join(row2))
+            
+            # Note if shifts were applied
+            window = xyz_window_for_mode(mode)
+            has_xy_shift = any(window[i-1] == 'X' and window[i] == 'Y' for i in range(1, 6))
+            if has_xy_shift:
+                print("  (shifts: X→Y and G→B applied as needed)")
+            
+            answers_shown.append("shape")
+        except ValueError as e:
+            print(f"\nError calculating shape: {e}")
+    
+    if answers_shown:
+        print(f"\n{'─' * 30}")
+        print(f"Showing: {', '.join(answers_shown)}")
+    
+    print(f"\n{'─' * 50}")
+
+
+def interactive_practice_session(mode, note, target_fret, fretboard, args):
+    """Run an interactive practice session for one challenge"""
+    show_key = False
+    show_position = False  
+    show_shape = False
+    
+    while True:
+        display_challenge_info(mode, note, target_fret, show_key, show_position, show_shape, fretboard, args)
+        
+        try:
+            response = input("\nYour choice: ").strip().lower()
+            
+            if response == 'k':
+                show_key = not show_key
+            elif response == 'p':
+                show_position = not show_position
+            elif response == 's':
+                show_shape = not show_shape
+            elif response in ['', 'n', 'next']:
+                return True  # Continue to next challenge
+            elif response in ['q', 'quit', 'exit']:
+                return False  # Quit the program
+            else:
+                # Show brief help for invalid input
+                print("\nInvalid input. Use: k (key), p (position), s (shape), Enter (next), q (quit)")
+                input("Press Enter to continue...")
+                
+        except KeyboardInterrupt:
+            print("\nGoodbye!")
+            return False
 
 
 def string_index_to_ordinal(string_idx: int) -> str:
@@ -231,15 +343,26 @@ def main():
     parser = argparse.ArgumentParser(description="Guitar Scale Practice App")
     parser.add_argument("--seed", type=int, help="Random seed for reproducible sequences")
     parser.add_argument("--debug", action="store_true", help="Show internal pitch calculations")
-    parser.add_argument("--show-xyz", action="store_true", help="Show 3NPS XYZ layout after Answer 1")
     parser.add_argument("--emit-json", action="store_true", help="Output JSON data for UI integration")
     args = parser.parse_args()
     
     if args.seed is not None:
         random.seed(args.seed)
-        print(f"Using random seed: {args.seed}")
     
     fretboard = build_fretboard()
+    
+    # Welcome message
+    clear_screen()
+    print("=" * 50)
+    print("GUITAR SCALE PRACTICE")
+    print("=" * 50)
+    print("\nWelcome! Test your knowledge of guitar scales.")
+    print("\nFor each challenge, try to figure out:")
+    print("  - The best position to play the note")
+    print("  - The parent key of the mode")
+    print("  - The 3NPS XYZ shape pattern")
+    print("\nPress Enter to begin...")
+    input()
     
     while True:
         # Generate random practice parameters
@@ -247,87 +370,12 @@ def main():
         note = random.choice(NOTE_NAMES_SHARP)
         target_fret = random.randint(1, 20)
         
-        # Display the challenge
-        print(f"\nMode: {mode} | Note: {note} | Target fret: {target_fret}")
-        print(f"XYZ: {get_xyz_display_string(mode)}")
+        # Run interactive practice session
+        continue_practicing = interactive_practice_session(mode, note, target_fret, fretboard, args)
         
-        # Wait for first reveal
-        wait_for_input()
-        
-        # Answer 1: Find best position
-        try:
-            string_idx, open_string_name, best_fret = find_best_position(
-                note, target_fret, fretboard, debug=args.debug
-            )
-            ordinal_string = string_index_to_ordinal(string_idx)
-            print(f"\nAnswer 1: {ordinal_string} string ({open_string_name}), {best_fret}{'st' if best_fret == 1 else 'nd' if best_fret == 2 else 'rd' if best_fret == 3 else 'th'} fret")
-            
-            # Show XYZ layout if requested
-            if args.show_xyz:
-                positions = plan_xyz_positions(mode, string_idx, best_fret)
-                print("\n3NPS/XYZ layout (low→high):")
-                
-                # Display in two rows for readability
-                row1 = []
-                row2 = []
-                for pos_idx, (s_idx, fret, symbol) in enumerate(positions):
-                    ordinal = string_index_to_ordinal(s_idx)
-                    string_name = STRING_NAMES[s_idx]
-                    if pos_idx < 3:
-                        row1.append(f"{ordinal[0]}({string_name}): {symbol} @ {fret}")
-                    else:
-                        row2.append(f"{ordinal[0]}({string_name}): {symbol} @ {fret}")
-                
-                print("  " + "  ".join(row1))
-                print("  " + "  ".join(row2))
-                
-                # Note if shifts were applied
-                window = xyz_window_for_mode(mode)
-                has_xy_shift = any(window[i-1] == 'X' and window[i] == 'Y' for i in range(1, 6))
-                if has_xy_shift:
-                    print("  (shifts: X→Y and G→B applied as needed)")
-            
-            # Emit JSON if requested
-            if args.emit_json:
-                positions = plan_xyz_positions(mode, string_idx, best_fret)
-                json_data = {
-                    "mode": mode,
-                    "tonic": note,
-                    "start_note": {"string": string_idx + 1, "fret": best_fret},  # Convert to 1-based for UI
-                    "window": xyz_window_for_mode(mode),
-                    "positions": [
-                        {"string": s_idx + 1, "fret": fret, "symbol": symbol}  # Convert to 1-based
-                        for s_idx, fret, symbol in positions
-                    ]
-                }
-                print("\nJSON output:")
-                print(json.dumps(json_data, indent=2))
-                
-        except ValueError as e:
-            print(f"Error: {e}")
-            continue
-        
-        # Wait for second reveal
-        wait_for_input()
-        
-        # Answer 2: Parent major key
-        parent_key = parent_major(mode, note)
-        print(f"\nAnswer 2: You are playing in the key of {parent_key}")
-        
-        # Ask to continue
-        while True:
-            try:
-                response = input("\nGo again? (Y/n): ").strip().lower()
-                if response in ['', 'y', 'yes']:
-                    break
-                elif response in ['n', 'no']:
-                    print("Goodbye!")
-                    return
-                else:
-                    print("Please enter Y or N")
-            except KeyboardInterrupt:
-                print("\nGoodbye!")
-                return
+        if not continue_practicing:
+            print("\nGoodbye!")
+            break
 
 
 if __name__ == "__main__":
