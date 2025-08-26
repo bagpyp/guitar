@@ -102,8 +102,8 @@ def find_best_position(note: str, target_fret: int, fretboard: dict, debug=False
     
     Tie-breaking rules:
     1. Closest to target_fret by absolute distance
-    2. On distance ties, prefer lower fret number
-    3. On fret ties, prefer lower-pitched string (higher string index)
+    2. On distance ties, prefer deeper/lower-pitched string (lower string index)
+    3. On string ties, prefer lower fret number
     
     Returns: (string_index, open_string_name, fret)
     """
@@ -125,8 +125,8 @@ def find_best_position(note: str, target_fret: int, fretboard: dict, debug=False
     if not candidates:
         raise ValueError(f"Note {note} not found on fretboard")
     
-    # Sort by: distance (asc), fret (asc), string_index (asc for lower pitch preference)
-    candidates.sort(key=lambda x: (x[0], x[1], x[2]))
+    # Sort by: distance (asc), string_index (asc for deeper strings), fret (asc)
+    candidates.sort(key=lambda x: (x[0], x[2], x[1]))
     
     distance, fret, string_idx = candidates[0]
     open_string_name = STRING_NAMES[string_idx]
@@ -157,7 +157,7 @@ def display_challenge_info(mode, note, target_fret, show_key=False, show_positio
     print("=" * 50)
     print(f"\nChallenge: {mode} mode | Note: {note} | Target fret: {target_fret}")
     print("\nControls:")
-    print("  [k] Show key    [p] Show position    [s] Show shape")
+    print("  [k] Show key    [p] Show position    [s] Show shape    [a] Show all")
     print("  [Enter] New challenge    [q] Quit")
     
     answers_shown = []
@@ -241,13 +241,19 @@ def interactive_practice_session(mode, note, target_fret, fretboard, args):
                 show_position = not show_position
             elif response == 's':
                 show_shape = not show_shape
+            elif response == 'a':
+                # Toggle all options at once
+                new_state = not (show_key and show_position and show_shape)
+                show_key = new_state
+                show_position = new_state
+                show_shape = new_state
             elif response in ['', 'n', 'next']:
                 return True  # Continue to next challenge
             elif response in ['q', 'quit', 'exit']:
                 return False  # Quit the program
             else:
                 # Show brief help for invalid input
-                print("\nInvalid input. Use: k (key), p (position), s (shape), Enter (next), q (quit)")
+                print("\nInvalid input. Use: k (key), p (position), s (shape), a (all), Enter (next), q (quit)")
                 input("Press Enter to continue...")
                 
         except KeyboardInterrupt:
