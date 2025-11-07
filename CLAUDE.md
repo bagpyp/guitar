@@ -31,6 +31,16 @@ guitar/
    - Frontend: Next.js app on port 3000
    - Frontend calls backend via REST API
 
+**Web UI Features:**
+1. **Scale Practice Tab** - Original feature for practicing modes/scales
+2. **Major Triads Tab** - Interactive triad visualization with:
+   - Long Neck View (default): All positions on one unified fretboard per string group
+   - Compact View: Individual diagrams for each position
+   - 4 string groups: 6-5-4, 5-4-3, 4-3-2, 3-2-1
+   - 4 positions per group (0-3) distributed across fretboard
+   - Color coding: Root=Red, 3rd=Green, 5th=Blue
+   - Position rings: P0=Purple, P1=Blue, P2=Green, P3=Amber
+
 ## Running Tests
 
 ### Python Tests
@@ -39,7 +49,7 @@ guitar/
 # From repo root
 .venv/bin/pytest -v
 
-# Expected: 12 tests passing
+# Expected: 24 tests passing (as of latest commit)
 ```
 
 ### TypeScript Tests
@@ -49,7 +59,7 @@ guitar/
 cd web
 npm test
 
-# Expected: 15 tests passing
+# Expected: 36 tests passing (as of latest commit)
 ```
 
 ### Full Test Suite
@@ -212,6 +222,70 @@ poetry run serve    # Run API server
 - TypeScript: React functional components with hooks.
 - Tests: Clear, descriptive names. One assertion per concept.
 - Keep it minimal and readable.
+
+## Features
+
+### Major Triads (Latest Feature)
+
+**What it does:**
+- Shows all major triad voicings for any key across 4 string groups
+- Each string group displays 4 positions (0-3) spanning the fretboard
+- Two view modes: Long Neck (unified fretboard) and Compact (separate diagrams)
+
+**Key Files:**
+- `main.py`: Triad generation logic (`build_major_triad`, `find_all_triad_voicings`, `select_4_positions`)
+- `api.py`: `GET /api/triads/{key}` endpoint
+- `web/lib/guitar/triads.ts`: TypeScript triad logic (mirrors Python)
+- `web/components/LongFretboardDiagram.tsx`: Unified vertical fretboard (426 lines)
+- `web/components/FretboardDiagram.tsx`: Compact individual diagrams
+- `web/components/MajorTriads.tsx`: Main UI component with view toggle
+- `test_triads.py`: 10 Python tests
+- `web/__tests__/triads.test.ts`: 21 TypeScript tests
+
+**Important Algorithm: `select_4_positions()`**
+
+⚠️ **CRITICAL**: This function uses a quartile-based approach, NOT fixed ranges!
+
+```python
+# CORRECT (current implementation):
+indices = [
+    0,                      # Position 0: 0th percentile (lowest)
+    round(n / 4),           # Position 1: 25th percentile
+    round(2 * n / 4),       # Position 2: 50th percentile
+    n - 1                   # Position 3: 100th percentile (highest)
+]
+```
+
+**Why quartiles?** Fixed ranges like `(0, 5.5), (4.5, 9.5), (8.5, 13.5), (11.5, 21)` caused a bug where voicings around fret 8 were skipped because they'd be grabbed by the wrong position bucket. Quartiles ensure even distribution regardless of how many voicings exist.
+
+**Bug History (FIXED):** C major on strings 3-2-1 was skipping the fret-8 voicing. Test in `test_position_selection_bug.py` now prevents regression.
+
+### Voicing Constraints
+
+- **Max 5-fret stretch**: Voicings with `max(frets) - min(frets) > 5` are filtered out
+- **All 3 triad notes required**: Root, 3rd, and 5th must all be present
+- **Inversion detection**: Based on lowest note (low string = low pitch)
+  - Root position: lowest note is root
+  - 1st inversion: lowest note is 3rd
+  - 2nd inversion: lowest note is 5th
+
+## Known Issues & Gotchas
+
+### 1. Quartile Rounding
+With small numbers of voicings (e.g., 5), quartile selection is critical:
+- 5 voicings → indices `[0, 1, 2, 4]` (correct)
+- Don't use `n // 3` which gives `[0, 1, 3, 4]` (skips index 2!)
+
+### 2. Python/TypeScript Parity
+The triad logic MUST match between `main.py` and `web/lib/guitar/triads.ts`. When updating one, update the other. Tests verify this parity.
+
+### 3. String Indexing
+- `string_idx = 0` → 6th string (low E)
+- `string_idx = 5` → 1st string (high E)
+- Strings are indexed **low to high pitch**, not high to low visually
+
+### 4. API Endpoint Returns 16 Voicings
+`GET /api/triads/{key}` returns 4 string groups × 4 positions = 16 voicings total. If a string group has fewer than 4 valid voicings, some positions may be missing.
 
 ## Remember
 
