@@ -164,13 +164,14 @@ export function select4Positions(
   }
 
   // Calculate indices for 4 evenly distributed positions
-  // We want to pick voicings at roughly 0%, 25%, 50%, 100% through the sorted list
-  // Using Math.round() for better distribution (e.g., with 5 voicings: [0, 1, 2, 4])
+  // We want to pick voicings at roughly 0%, 25%, 50%, 75% through the sorted list
+  // Using Math.round() for better distribution (e.g., with 5 voicings: [0, 1, 2, 3])
+  // Note: We use (n-1) to distribute across the INDEX RANGE, not the COUNT
   const indices = [
-    0,                         // Position 0: first (lowest)
-    Math.round(n / 4),         // Position 1: ~25%
-    Math.round((2 * n) / 4),   // Position 2: ~50%
-    n - 1,                     // Position 3: last (highest)
+    0,                              // Position 0: 0% (first)
+    Math.round((n - 1) / 4),        // Position 1: 25%
+    Math.round((2 * (n - 1)) / 4),  // Position 2: 50%
+    Math.round((3 * (n - 1)) / 4),  // Position 3: 75%
   ];
 
   const selected: TriadVoicing[] = [];
