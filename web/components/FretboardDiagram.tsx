@@ -6,6 +6,7 @@ import type { TriadVoicing } from '../lib/guitar/triads';
 interface FretboardDiagramProps {
   voicing: TriadVoicing;
   stringNames: string[]; // e.g., ["G", "B", "E"] for strings 3-2-1
+  triadPcs: [number, number, number]; // [root, third, fifth] pitch classes
 }
 
 /**
@@ -19,8 +20,8 @@ const NOTE_COLORS: Record<string, { bg: string; border: string; text: string }> 
     text: 'text-white',
   },
   third: {
-    bg: 'bg-green-500',
-    border: 'border-green-600',
+    bg: 'bg-yellow-500',
+    border: 'border-yellow-600',
     text: 'text-white',
   },
   fifth: {
@@ -31,21 +32,20 @@ const NOTE_COLORS: Record<string, { bg: string; border: string; text: string }> 
 };
 
 /**
- * Get the interval name for a note in the triad
+ * Get the interval name for a note pitch class
  */
-function getIntervalName(noteIndex: number, triadNotes: number[]): 'root' | 'third' | 'fifth' {
-  const [root, third, fifth] = triadNotes;
-  const note = triadNotes[noteIndex];
+function getIntervalName(notePc: number, triadPcs: [number, number, number]): 'root' | 'third' | 'fifth' {
+  const [root, third, fifth] = triadPcs;
 
-  if (note === root) return 'root';
-  if (note === third) return 'third';
+  if (notePc === root) return 'root';
+  if (notePc === third) return 'third';
   return 'fifth';
 }
 
 /**
  * SVG-based vertical fretboard diagram showing a triad voicing
  */
-export default function FretboardDiagram({ voicing, stringNames }: FretboardDiagramProps) {
+export default function FretboardDiagram({ voicing, stringNames, triadPcs }: FretboardDiagramProps) {
   const [hoveredFret, setHoveredFret] = useState<number | null>(null);
 
   const { frets, notes, noteNames, inversion } = voicing;
@@ -136,7 +136,8 @@ export default function FretboardDiagram({ voicing, stringNames }: FretboardDiag
             ? fretHeight / 2
             : fretHeight + (fret - minFret) * fretHeight + fretHeight / 2;
 
-          const intervalName = getIntervalName(stringIdx, notes);
+          const notePc = notes[stringIdx];
+          const intervalName = getIntervalName(notePc, triadPcs);
           const color = NOTE_COLORS[intervalName];
           const noteName = noteNames[stringIdx];
 
@@ -185,7 +186,7 @@ export default function FretboardDiagram({ voicing, stringNames }: FretboardDiag
         </span>
         {hoveredFret !== null && (
           <span className="text-yellow-400 font-medium">
-            {noteNames[hoveredFret]} ({getIntervalName(hoveredFret, notes)})
+            {noteNames[hoveredFret]} ({getIntervalName(notes[hoveredFret], triadPcs)})
           </span>
         )}
       </div>
@@ -193,15 +194,15 @@ export default function FretboardDiagram({ voicing, stringNames }: FretboardDiag
       {/* Legend */}
       <div className="flex gap-3 text-xs mt-1">
         <div className="flex items-center gap-1">
-          <div className={`w-3 h-3 rounded-full ${NOTE_COLORS.root.bg}`}></div>
+          <div className="w-3 h-3 rounded-full bg-red-500"></div>
           <span className="text-gray-400">Root</span>
         </div>
         <div className="flex items-center gap-1">
-          <div className={`w-3 h-3 rounded-full ${NOTE_COLORS.third.bg}`}></div>
+          <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
           <span className="text-gray-400">3rd</span>
         </div>
         <div className="flex items-center gap-1">
-          <div className={`w-3 h-3 rounded-full ${NOTE_COLORS.fifth.bg}`}></div>
+          <div className="w-3 h-3 rounded-full bg-blue-500"></div>
           <span className="text-gray-400">5th</span>
         </div>
       </div>

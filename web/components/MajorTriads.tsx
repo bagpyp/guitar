@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import FretboardDiagram from './FretboardDiagram';
 import LongFretboardDiagram from './LongFretboardDiagram';
 import type { TriadsData } from '../lib/guitar/triads';
+import { nameToPc } from '../lib/guitar';
 
 const ALL_KEYS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
@@ -152,56 +153,78 @@ export default function MajorTriads() {
         <>
           {/* Long Neck View */}
           {viewMode === 'long-neck' && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {triadsData.stringGroups.map((group, groupIdx) => (
-                <LongFretboardDiagram
-                  key={groupIdx}
-                  voicings={group.voicings}
-                  stringNames={group.stringNames}
-                  stringGroupLabel={STRING_GROUP_LABELS[groupIdx]}
-                />
-              ))}
+            <div className="w-full overflow-x-auto bg-gray-900/30 py-6 rounded-lg">
+              <div className="flex gap-6" style={{ flexDirection: 'row', flexWrap: 'nowrap', display: 'flex' }}>
+                {triadsData.stringGroups.map((group, groupIdx) => {
+                  // Convert triad note names to pitch classes
+                  const triadPcs: [number, number, number] = [
+                    nameToPc(triadsData.triadNotes[0] as any),
+                    nameToPc(triadsData.triadNotes[1] as any),
+                    nameToPc(triadsData.triadNotes[2] as any),
+                  ];
+
+                  return (
+                    <div key={groupIdx} className="flex-shrink-0">
+                      <LongFretboardDiagram
+                        voicings={group.voicings}
+                        stringNames={group.stringNames}
+                        stringGroupLabel={STRING_GROUP_LABELS[groupIdx]}
+                        triadPcs={triadPcs}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 
           {/* Compact View */}
           {viewMode === 'compact' && (
             <div className="space-y-8">
-              {triadsData.stringGroups.map((group, groupIdx) => (
-                <div key={groupIdx} className="space-y-4">
-                  {/* String group header */}
-                  <div className="border-l-4 border-blue-500 pl-4">
-                    <h3 className="text-lg font-semibold text-gray-200">
-                      {STRING_GROUP_LABELS[groupIdx]}
-                    </h3>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {group.voicings.length} position{group.voicings.length !== 1 ? 's' : ''} available
-                    </p>
-                  </div>
+              {triadsData.stringGroups.map((group, groupIdx) => {
+                // Convert triad note names to pitch classes
+                const triadPcs: [number, number, number] = [
+                  nameToPc(triadsData.triadNotes[0] as any),
+                  nameToPc(triadsData.triadNotes[1] as any),
+                  nameToPc(triadsData.triadNotes[2] as any),
+                ];
 
-                  {/* Voicings grid */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                    {group.voicings.map((voicing, voicingIdx) => (
-                      <div key={voicingIdx} className="space-y-2">
-                        {/* Position label */}
-                        <div className="text-center">
-                          <span className="inline-block px-3 py-1 bg-gray-700 text-gray-300 rounded-md text-sm font-medium">
-                            Position {voicing.position}
-                          </span>
+                return (
+                  <div key={groupIdx} className="space-y-4">
+                    {/* String group header */}
+                    <div className="border-l-4 border-blue-500 pl-4">
+                      <h3 className="text-lg font-semibold text-gray-200">
+                        {STRING_GROUP_LABELS[groupIdx]}
+                      </h3>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {group.voicings.length} position{group.voicings.length !== 1 ? 's' : ''} available
+                      </p>
+                    </div>
+
+                    {/* Voicings grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                      {group.voicings.map((voicing, voicingIdx) => (
+                        <div key={voicingIdx} className="space-y-2">
+                          {/* Position label */}
+                          <div className="text-center">
+                            <span className="inline-block px-3 py-1 bg-gray-700 text-gray-300 rounded-md text-sm font-medium">
+                              Position {voicing.position}
+                            </span>
+                          </div>
+
+                          {/* Fretboard diagram */}
+                          <FretboardDiagram
+                            voicing={voicing}
+                            stringNames={group.stringNames}
+                            triadPcs={triadPcs}
+                          />
+
+                          {/* Fret info */}
+                          <div className="text-center text-xs text-gray-500">
+                            Frets: {voicing.frets.join('-')}
+                          </div>
                         </div>
-
-                        {/* Fretboard diagram */}
-                        <FretboardDiagram
-                          voicing={voicing}
-                          stringNames={group.stringNames}
-                        />
-
-                        {/* Fret info */}
-                        <div className="text-center text-xs text-gray-500">
-                          Frets: {voicing.frets.join('-')}
-                        </div>
-                      </div>
-                    ))}
+                      ))}
 
                     {/* Empty slots if fewer than 4 voicings */}
                     {group.voicings.length < 4 &&
@@ -213,9 +236,10 @@ export default function MajorTriads() {
                           <span className="text-gray-600 text-sm">No voicing found</span>
                         </div>
                       ))}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </>
@@ -230,7 +254,7 @@ export default function MajorTriads() {
           <li>• Select a key from the dropdown to view all major triad voicings</li>
           <li>• Hover over dots to see note names, intervals, and position info</li>
           <li>• Click position buttons to highlight/isolate specific positions</li>
-          <li>• Colors: <span className="text-red-400">Red = Root</span>, <span className="text-green-400">Green = 3rd</span>, <span className="text-blue-400">Blue = 5th</span></li>
+          <li>• Colors: <span className="text-red-400">Red = Root</span>, <span className="text-yellow-400">Yellow = 3rd</span>, <span className="text-blue-400">Blue = 5th</span></li>
           <li>• Position rings show which voicing (P0, P1, P2, P3) each shape belongs to</li>
         </ul>
       </div>

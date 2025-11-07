@@ -7,6 +7,7 @@ interface LongFretboardDiagramProps {
   voicings: TriadVoicing[]; // All 4 positions for this string group
   stringNames: string[]; // e.g., ["G", "B", "E"] for strings 3-2-1
   stringGroupLabel: string; // e.g., "Strings 3-2-1 (G-B-E)"
+  triadPcs: [number, number, number]; // [root, third, fifth] pitch classes
 }
 
 /**
@@ -24,19 +25,18 @@ const POSITION_COLORS = [
  */
 const NOTE_ROLE_COLORS: Record<string, { bg: string; text: string }> = {
   root: { bg: '#ef4444', text: '#ffffff' },   // Red
-  third: { bg: '#10b981', text: '#ffffff' },  // Green
+  third: { bg: '#eab308', text: '#ffffff' },  // Yellow
   fifth: { bg: '#3b82f6', text: '#ffffff' },  // Blue
 };
 
 /**
- * Get the interval name for a note in the triad
+ * Get the interval name for a note pitch class
  */
-function getIntervalName(noteIndex: number, triadNotes: number[]): 'root' | 'third' | 'fifth' {
-  const [root, third, fifth] = triadNotes;
-  const note = triadNotes[noteIndex];
+function getIntervalName(notePc: number, triadPcs: [number, number, number]): 'root' | 'third' | 'fifth' {
+  const [root, third, fifth] = triadPcs;
 
-  if (note === root) return 'root';
-  if (note === third) return 'third';
+  if (notePc === root) return 'root';
+  if (notePc === third) return 'third';
   return 'fifth';
 }
 
@@ -47,6 +47,7 @@ export default function LongFretboardDiagram({
   voicings,
   stringNames,
   stringGroupLabel,
+  triadPcs,
 }: LongFretboardDiagramProps) {
   const [hoveredDot, setHoveredDot] = useState<{
     voicingIdx: number;
@@ -81,7 +82,7 @@ export default function LongFretboardDiagram({
   });
 
   return (
-    <div className="flex flex-col items-center gap-4 p-6 bg-gray-800 rounded-lg border border-gray-700">
+    <div className="flex flex-col items-center gap-4 p-6 bg-gray-800 rounded-lg border border-gray-700 min-w-fit">
       {/* Header */}
       <div className="text-center">
         <h3 className="text-lg font-semibold text-gray-200">{stringGroupLabel}</h3>
@@ -196,7 +197,8 @@ export default function LongFretboardDiagram({
                       ? fretHeight / 2
                       : fretHeight + fret * fretHeight - fretHeight / 2;
 
-                  const intervalName = getIntervalName(stringIdx, voicing.notes);
+                  const notePc = voicing.notes[stringIdx];
+                  const intervalName = getIntervalName(notePc, triadPcs);
                   const noteColor = NOTE_ROLE_COLORS[intervalName];
                   const noteName = voicing.noteNames[stringIdx];
 
@@ -289,7 +291,7 @@ export default function LongFretboardDiagram({
                 Note: {voicings[hoveredDot.voicingIdx].noteNames[hoveredDot.stringIdx]}
               </div>
               <div className="text-gray-400 text-xs">
-                Interval: {getIntervalName(hoveredDot.stringIdx, voicings[hoveredDot.voicingIdx].notes)}
+                Interval: {getIntervalName(voicings[hoveredDot.voicingIdx].notes[hoveredDot.stringIdx], triadPcs)}
               </div>
               <div className="text-gray-400 text-xs">
                 Inversion: {voicings[hoveredDot.voicingIdx].inversion}
@@ -337,15 +339,15 @@ export default function LongFretboardDiagram({
       {/* Note role legend */}
       <div className="flex gap-4 text-xs mt-2 pt-3 border-t border-gray-700">
         <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: NOTE_ROLE_COLORS.root.bg }} />
+          <div className="w-3 h-3 rounded-full bg-red-500" />
           <span className="text-gray-400">Root</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: NOTE_ROLE_COLORS.third.bg }} />
+          <div className="w-3 h-3 rounded-full bg-yellow-500" />
           <span className="text-gray-400">3rd</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: NOTE_ROLE_COLORS.fifth.bg }} />
+          <div className="w-3 h-3 rounded-full bg-blue-500" />
           <span className="text-gray-400">5th</span>
         </div>
       </div>
