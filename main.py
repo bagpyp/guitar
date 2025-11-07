@@ -453,11 +453,13 @@ def select_4_positions(voicings: list) -> list:
     """
     Select 4 representative voicings spanning the fretboard (positions 0-3).
 
-    Buckets voicings by average fret into 4 ranges:
-    - Position 0: avg_fret 0-5.5 (open/low frets)
-    - Position 1: avg_fret 4.5-9.5 (mid-low)
-    - Position 2: avg_fret 8.5-13.5 (mid-high)
-    - Position 3: avg_fret 11.5+ (high)
+    Uses a quartile-based approach to ensure even distribution:
+    - Position 0: ~0th percentile (lowest voicing)
+    - Position 1: ~33rd percentile
+    - Position 2: ~66th percentile
+    - Position 3: ~100th percentile (highest voicing)
+
+    This ensures we don't skip voicings in the middle range.
 
     Returns: list of up to 4 voicings, each with added "position" key (0-3)
     """
@@ -466,44 +468,34 @@ def select_4_positions(voicings: list) -> list:
 
     # Sort by average fret
     sorted_voicings = sorted(voicings, key=lambda v: v["avg_fret"])
+    n = len(sorted_voicings)
 
-    # Define position ranges (with slight overlap for flexibility)
-    position_ranges = [
-        (0, 5.5),      # Position 0: open/low
-        (4.5, 9.5),    # Position 1: mid-low
-        (8.5, 13.5),   # Position 2: mid-high
-        (11.5, 21)     # Position 3: high
+    if n <= 4:
+        # If 4 or fewer voicings, use them all
+        selected = []
+        for idx, v in enumerate(sorted_voicings):
+            voicing = v.copy()
+            voicing["position"] = idx
+            selected.append(voicing)
+        return selected
+
+    # Calculate indices for 4 evenly distributed positions
+    # We want to pick voicings at roughly 0%, 25%, 50%, 75%, 100% through the sorted list
+    # Using round() for better distribution (e.g., with 5 voicings: [0, 1, 2, 4])
+    indices = [
+        0,                          # Position 0: first (lowest)
+        round(n / 4),               # Position 1: ~25%
+        round(2 * n / 4),           # Position 2: ~50%
+        n - 1                       # Position 3: last (highest)
     ]
 
     selected = []
-    used_voicings = set()
+    for position_idx, voicing_idx in enumerate(indices):
+        voicing = sorted_voicings[voicing_idx].copy()
+        voicing["position"] = position_idx
+        selected.append(voicing)
 
-    for position_idx, (min_avg, max_avg) in enumerate(position_ranges):
-        # Find voicings in this range that haven't been used
-        candidates = [
-            v for v in sorted_voicings
-            if min_avg <= v["avg_fret"] < max_avg and id(v) not in used_voicings
-        ]
-
-        if candidates:
-            # Pick the first (lowest avg_fret) in this range
-            voicing = candidates[0].copy()
-            voicing["position"] = position_idx
-            selected.append(voicing)
-            used_voicings.add(id(candidates[0]))
-
-    # If we found fewer than 4, try to fill with remaining voicings
-    if len(selected) < 4:
-        for v in sorted_voicings:
-            if id(v) not in used_voicings:
-                voicing = v.copy()
-                voicing["position"] = len(selected)
-                selected.append(voicing)
-                used_voicings.add(id(v))
-                if len(selected) >= 4:
-                    break
-
-    return selected[:4]
+    return selected
 
 
 def main():

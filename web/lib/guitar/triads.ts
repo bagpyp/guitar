@@ -136,11 +136,13 @@ export function findAllTriadVoicings(
 /**
  * Select 4 representative voicings spanning the fretboard (positions 0-3)
  *
- * Buckets voicings by average fret into 4 ranges:
- * - Position 0: avg_fret 0-5.5 (open/low frets)
- * - Position 1: avg_fret 4.5-9.5 (mid-low)
- * - Position 2: avg_fret 8.5-13.5 (mid-high)
- * - Position 3: avg_fret 11.5+ (high)
+ * Uses a quartile-based approach to ensure even distribution:
+ * - Position 0: ~0th percentile (lowest voicing)
+ * - Position 1: ~25th percentile
+ * - Position 2: ~50th percentile
+ * - Position 3: ~100th percentile (highest voicing)
+ *
+ * This ensures we don't skip voicings in the middle range.
  *
  * @param voicings Array of voicings to select from
  * @returns Array of up to 4 voicings, each with added "position" key (0-3)
@@ -154,45 +156,31 @@ export function select4Positions(
 
   // Sort by average fret
   const sortedVoicings = [...voicings].sort((a, b) => a.avgFret - b.avgFret);
+  const n = sortedVoicings.length;
 
-  // Define position ranges (with slight overlap for flexibility)
-  const positionRanges: [number, number][] = [
-    [0, 5.5], // Position 0: open/low
-    [4.5, 9.5], // Position 1: mid-low
-    [8.5, 13.5], // Position 2: mid-high
-    [11.5, 21], // Position 3: high
+  if (n <= 4) {
+    // If 4 or fewer voicings, use them all
+    return sortedVoicings.map((v, idx) => ({ ...v, position: idx }));
+  }
+
+  // Calculate indices for 4 evenly distributed positions
+  // We want to pick voicings at roughly 0%, 25%, 50%, 100% through the sorted list
+  // Using Math.round() for better distribution (e.g., with 5 voicings: [0, 1, 2, 4])
+  const indices = [
+    0,                         // Position 0: first (lowest)
+    Math.round(n / 4),         // Position 1: ~25%
+    Math.round((2 * n) / 4),   // Position 2: ~50%
+    n - 1,                     // Position 3: last (highest)
   ];
 
   const selected: TriadVoicing[] = [];
-  const usedIndices = new Set<number>();
-
-  for (let positionIdx = 0; positionIdx < positionRanges.length; positionIdx++) {
-    const [minAvg, maxAvg] = positionRanges[positionIdx];
-
-    // Find voicings in this range that haven't been used
-    const candidateIdx = sortedVoicings.findIndex(
-      (v, idx) => !usedIndices.has(idx) && v.avgFret >= minAvg && v.avgFret < maxAvg
-    );
-
-    if (candidateIdx !== -1) {
-      const voicing = { ...sortedVoicings[candidateIdx], position: positionIdx };
-      selected.push(voicing);
-      usedIndices.add(candidateIdx);
-    }
+  for (let positionIdx = 0; positionIdx < indices.length; positionIdx++) {
+    const voicingIdx = indices[positionIdx];
+    const voicing = { ...sortedVoicings[voicingIdx], position: positionIdx };
+    selected.push(voicing);
   }
 
-  // If we found fewer than 4, try to fill with remaining voicings
-  if (selected.length < 4) {
-    for (let idx = 0; idx < sortedVoicings.length && selected.length < 4; idx++) {
-      if (!usedIndices.has(idx)) {
-        const voicing = { ...sortedVoicings[idx], position: selected.length };
-        selected.push(voicing);
-        usedIndices.add(idx);
-      }
-    }
-  }
-
-  return selected.slice(0, 4);
+  return selected;
 }
 
 /**
