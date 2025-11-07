@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Tabs, Tab } from '@/components/Tabs';
 import ScalePractice from '@/components/ScalePractice';
+import MajorTriads from '@/components/MajorTriads';
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState('scale-practice');
@@ -20,10 +21,7 @@ export default function Home() {
             <ScalePractice />
           </Tab>
           <Tab id="triads" label="Major Triads">
-            <div className="text-center text-gray-400 py-12">
-              <p className="text-xl">Major triads feature coming soon!</p>
-              <p className="text-sm mt-2">Display all major triads along 4 string groups with inversions</p>
-            </div>
+            <MajorTriads />
           </Tab>
         </Tabs>
       </div>

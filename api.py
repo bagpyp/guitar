@@ -15,6 +15,9 @@ from main import (
     get_xyz_display_string,
     plan_xyz_positions,
     string_index_to_ordinal,
+    build_major_triad,
+    find_all_triad_voicings,
+    select_4_positions,
     MODES,
     NOTE_NAMES_SHARP,
     STRING_NAMES,
@@ -59,6 +62,29 @@ class Answer(BaseModel):
     position: Position
     xyzPattern: str
     xyzLayout: List[XYZPosition]
+
+
+# Triad-related models
+class TriadVoicing(BaseModel):
+    position: int  # 0, 1, 2, or 3
+    strings: List[int]  # [low_string_idx, mid_string_idx, high_string_idx]
+    frets: List[int]  # [fret1, fret2, fret3]
+    notes: List[int]  # [pc1, pc2, pc3] - pitch classes
+    noteNames: List[str]  # ["C", "E", "G"]
+    inversion: str  # "root", "first", or "second"
+    avgFret: float
+
+
+class StringGroupTriads(BaseModel):
+    strings: List[int]  # e.g., [0, 1, 2] for strings 6-5-4
+    stringNames: List[str]  # e.g., ["E", "A", "D"]
+    voicings: List[TriadVoicing]  # 4 voicings (positions 0-3)
+
+
+class TriadsResponse(BaseModel):
+    key: str  # e.g., "C"
+    triadNotes: List[str]  # ["C", "E", "G"]
+    stringGroups: List[StringGroupTriads]  # 4 string groups
 
 
 @app.get("/")
@@ -133,6 +159,77 @@ def get_modes() -> List[str]:
 def get_notes() -> List[str]:
     """Get list of all note names"""
     return NOTE_NAMES_SHARP
+
+
+@app.get("/api/triads/{key}")
+def get_triads(key: str) -> TriadsResponse:
+    """
+    Get all major triad voicings for a given key.
+    Returns 4 string groups, each with 4 voicings (positions 0-3).
+
+    Args:
+        key: Root note name (e.g., "C", "D#", "F")
+
+    Returns:
+        TriadsResponse with 16 total voicings (4 string groups × 4 positions)
+    """
+    # Validate key
+    if key not in NOTE_NAMES_SHARP:
+        return {"error": f"Invalid key: {key}. Must be one of {NOTE_NAMES_SHARP}"}
+
+    # Build the triad
+    triad_pcs = build_major_triad(key)
+    from main import pc_to_sharp_name
+    triad_note_names = [pc_to_sharp_name(pc) for pc in triad_pcs]
+
+    # Define the 4 string groups (adjacent 3-string sets)
+    # String indices: 0=6th(E), 1=5th(A), 2=4th(D), 3=3rd(G), 4=2nd(B), 5=1st(E)
+    string_groups_data = [
+        [0, 1, 2],  # Strings 6-5-4 (E-A-D)
+        [1, 2, 3],  # Strings 5-4-3 (A-D-G)
+        [2, 3, 4],  # Strings 4-3-2 (D-G-B)
+        [3, 4, 5],  # Strings 3-2-1 (G-B-E)
+    ]
+
+    string_groups_result = []
+
+    for string_group_indices in string_groups_data:
+        # Get string names for this group
+        group_string_names = [STRING_NAMES[idx] for idx in string_group_indices]
+
+        # Find all voicings on this string group
+        all_voicings = find_all_triad_voicings(triad_pcs, string_group_indices, fretboard)
+
+        # Select 4 representative positions
+        selected_voicings = select_4_positions(all_voicings)
+
+        # Convert to Pydantic models
+        voicing_models = [
+            TriadVoicing(
+                position=v["position"],
+                strings=v["strings"],
+                frets=v["frets"],
+                notes=v["notes"],
+                noteNames=v["note_names"],
+                inversion=v["inversion"],
+                avgFret=v["avg_fret"]
+            )
+            for v in selected_voicings
+        ]
+
+        string_groups_result.append(
+            StringGroupTriads(
+                strings=string_group_indices,
+                stringNames=group_string_names,
+                voicings=voicing_models
+            )
+        )
+
+    return TriadsResponse(
+        key=key,
+        triadNotes=triad_note_names,
+        stringGroups=string_groups_result
+    )
 
 
 if __name__ == "__main__":

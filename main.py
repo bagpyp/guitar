@@ -345,6 +345,167 @@ def plan_xyz_positions(mode: str, start_string_idx: int, start_fret: int) -> lis
     return plan
 
 
+# ============================================================================
+# TRIAD FUNCTIONS
+# ============================================================================
+
+def build_major_triad(root_name: str) -> list:
+    """
+    Build major triad pitch classes.
+    Returns: [root_pc, third_pc, fifth_pc]
+    """
+    root_pc = name_to_pc(root_name)
+    third_pc = (root_pc + 4) % 12  # Major third (4 semitones)
+    fifth_pc = (root_pc + 7) % 12  # Perfect fifth (7 semitones)
+    return [root_pc, third_pc, fifth_pc]
+
+
+def identify_inversion(notes: list, triad_pcs: list) -> str:
+    """
+    Identify which inversion type based on lowest note.
+
+    Args:
+        notes: [low, mid, high] pitch classes from low to high strings
+        triad_pcs: [root, third, fifth] pitch classes
+
+    Returns: "root", "first", or "second"
+    """
+    root_pc, third_pc, fifth_pc = triad_pcs
+    lowest_note = notes[0]
+
+    if lowest_note == root_pc:
+        return "root"
+    elif lowest_note == third_pc:
+        return "first"
+    elif lowest_note == fifth_pc:
+        return "second"
+    else:
+        return "unknown"
+
+
+def find_all_triad_voicings(triad_pcs: list, string_group: list, fretboard: dict, max_stretch: int = 5) -> list:
+    """
+    Find all valid triad voicings on a 3-string group.
+
+    Args:
+        triad_pcs: [root, third, fifth] pitch classes
+        string_group: [low_string_idx, mid_string_idx, high_string_idx]
+                      e.g., [3, 4, 5] for strings G-B-E
+        fretboard: fretboard mapping from build_fretboard()
+        max_stretch: maximum fret span allowed (default 5)
+
+    Returns: list of voicing dicts with keys:
+        - strings: [s1, s2, s3]
+        - frets: [f1, f2, f3]
+        - notes: [pc1, pc2, pc3] (pitch classes)
+        - note_names: [name1, name2, name3]
+        - inversion: "root"|"first"|"second"
+        - avg_fret: float
+    """
+    voicings = []
+    triad_set = set(triad_pcs)
+
+    # Try all combinations of frets on the 3 strings
+    for fret1 in range(21):  # Low string
+        note1 = fretboard[string_group[0]][fret1]
+        if note1 not in triad_set:
+            continue
+
+        for fret2 in range(21):  # Mid string
+            note2 = fretboard[string_group[1]][fret2]
+            if note2 not in triad_set:
+                continue
+
+            for fret3 in range(21):  # High string
+                note3 = fretboard[string_group[2]][fret3]
+                if note3 not in triad_set:
+                    continue
+
+                # Check that all three unique triad notes are present
+                notes = [note1, note2, note3]
+                if set(notes) != triad_set:
+                    continue
+
+                # Check fret stretch constraint
+                min_fret = min(fret1, fret2, fret3)
+                max_fret = max(fret1, fret2, fret3)
+                if max_fret - min_fret > max_stretch:
+                    continue
+
+                # Valid voicing found
+                avg_fret = (fret1 + fret2 + fret3) / 3.0
+                inversion = identify_inversion(notes, triad_pcs)
+                note_names = [pc_to_sharp_name(pc) for pc in notes]
+
+                voicings.append({
+                    "strings": string_group.copy(),
+                    "frets": [fret1, fret2, fret3],
+                    "notes": notes.copy(),
+                    "note_names": note_names,
+                    "inversion": inversion,
+                    "avg_fret": avg_fret
+                })
+
+    return voicings
+
+
+def select_4_positions(voicings: list) -> list:
+    """
+    Select 4 representative voicings spanning the fretboard (positions 0-3).
+
+    Buckets voicings by average fret into 4 ranges:
+    - Position 0: avg_fret 0-5.5 (open/low frets)
+    - Position 1: avg_fret 4.5-9.5 (mid-low)
+    - Position 2: avg_fret 8.5-13.5 (mid-high)
+    - Position 3: avg_fret 11.5+ (high)
+
+    Returns: list of up to 4 voicings, each with added "position" key (0-3)
+    """
+    if not voicings:
+        return []
+
+    # Sort by average fret
+    sorted_voicings = sorted(voicings, key=lambda v: v["avg_fret"])
+
+    # Define position ranges (with slight overlap for flexibility)
+    position_ranges = [
+        (0, 5.5),      # Position 0: open/low
+        (4.5, 9.5),    # Position 1: mid-low
+        (8.5, 13.5),   # Position 2: mid-high
+        (11.5, 21)     # Position 3: high
+    ]
+
+    selected = []
+    used_voicings = set()
+
+    for position_idx, (min_avg, max_avg) in enumerate(position_ranges):
+        # Find voicings in this range that haven't been used
+        candidates = [
+            v for v in sorted_voicings
+            if min_avg <= v["avg_fret"] < max_avg and id(v) not in used_voicings
+        ]
+
+        if candidates:
+            # Pick the first (lowest avg_fret) in this range
+            voicing = candidates[0].copy()
+            voicing["position"] = position_idx
+            selected.append(voicing)
+            used_voicings.add(id(candidates[0]))
+
+    # If we found fewer than 4, try to fill with remaining voicings
+    if len(selected) < 4:
+        for v in sorted_voicings:
+            if id(v) not in used_voicings:
+                voicing = v.copy()
+                voicing["position"] = len(selected)
+                selected.append(voicing)
+                used_voicings.add(id(v))
+                if len(selected) >= 4:
+                    break
+
+    return selected[:4]
+
+
 def main():
     parser = argparse.ArgumentParser(description="Guitar Scale Practice App")
     parser.add_argument("--seed", type=int, help="Random seed for reproducible sequences")
