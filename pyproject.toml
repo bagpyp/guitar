@@ -8,12 +8,18 @@ packages = [{include = "*.py"}]
 
 [tool.poetry.dependencies]
 python = "^3.8"
+fastapi = "^0.104.0"
+uvicorn = "^0.24.0"
+pydantic = "^2.0.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.0.0"
+httpx = "^0.25.0"
 
 [tool.poetry.scripts]
 guitar = "main:main"
+api = "api:main"
+serve = "uvicorn api:app --reload --port 8000"
 
 [build-system]
 requires = ["poetry-core"]

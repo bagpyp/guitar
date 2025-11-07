@@ -1,21 +1,38 @@
 # Guitar Scale Practice
 
+## Quick Start
+
+**Terminal 1** - Start API server:
+```bash
+.venv/bin/python api.py     # or: poetry run serve
+```
+
+**Terminal 2** - Start web UI:
+```bash
+cd web
+npm run dev                 # localhost:3000
+```
+
 ## Console App
 
 ```bash
-python main.py          # interactive scale practice
-.venv/bin/pytest        # run tests
+python main.py              # interactive practice (no server needed)
 ```
 
-## Web UI
+## Tests
 
 ```bash
-cd web
-npm install --ignore-scripts
-npm run dev             # starts on localhost:3000
-npm test                # run tests
+.venv/bin/pytest            # Python tests
+cd web && npm test          # TypeScript tests
+```
+
+## Poetry Scripts
+
+```bash
+poetry run guitar           # console app
+poetry run serve            # API server (port 8000)
 ```
 
 ## PyCharm
 
-Interpreter: `/Users/robbie/bagpyp/guitar/.venv/bin/python`
+Interpreter: `.venv/bin/python`
