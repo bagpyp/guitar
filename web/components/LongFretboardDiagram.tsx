@@ -55,19 +55,31 @@ export default function LongFretboardDiagram({
   } | null>(null);
   const [highlightedPosition, setHighlightedPosition] = useState<number | null>(null);
 
-  // SVG dimensions for long neck
-  const width = 300;
+  // Get the string group indices (e.g., [3, 4, 5] for strings 3-2-1)
+  const stringGroupIndices = voicings.length > 0 ? voicings[0].strings : [3, 4, 5];
+
+  // SVG dimensions for long neck - wider to show all 6 strings
+  const width = 450;
   const height = 1000;
   const numFrets = 21; // Show frets 0-20
   const fretHeight = height / (numFrets + 1);
-  const stringSpacing = width / 5; // Space for 3 strings with margins
+  const stringSpacing = width / 7; // Space for 6 strings with margins
 
-  // Calculate string X positions
-  const stringXPositions = [
-    stringSpacing * 1.5,
-    stringSpacing * 2.5,
-    stringSpacing * 3.5,
+  // All 6 guitar strings (6th to 1st)
+  const allStringNames = ['E', 'A', 'D', 'G', 'B', 'E'];
+
+  // Calculate string X positions for all 6 strings
+  const allStringXPositions = [
+    stringSpacing * 1,
+    stringSpacing * 2,
+    stringSpacing * 3,
+    stringSpacing * 4,
+    stringSpacing * 5,
+    stringSpacing * 6,
   ];
+
+  // Determine which strings are active (part of this group)
+  const activeStringIndices = new Set(stringGroupIndices);
 
   // Group all dots by fret and string to detect overlaps
   const dotPositions = new Map<string, Array<{ voicingIdx: number; stringIdx: number }>>();
@@ -89,10 +101,15 @@ export default function LongFretboardDiagram({
         <p className="text-sm text-gray-400 mt-1">All {voicings.length} positions on one neck</p>
       </div>
 
-      {/* String names header */}
-      <div className="flex gap-16 text-sm text-gray-400 font-medium">
-        {stringNames.map((name, idx) => (
-          <span key={idx} className="w-8 text-center">
+      {/* String names header - all 6 strings */}
+      <div className="flex justify-around w-full text-sm font-medium" style={{ width: `${width}px` }}>
+        {allStringNames.map((name, idx) => (
+          <span
+            key={idx}
+            className={`w-8 text-center ${
+              activeStringIndices.has(idx) ? 'text-blue-400 font-bold' : 'text-gray-600'
+            }`}
+          >
             {name}
           </span>
         ))}
@@ -113,11 +130,11 @@ export default function LongFretboardDiagram({
 
             return (
               <g key={`fret-${fretIdx}`}>
-                {/* Fret line */}
+                {/* Fret line - spans all 6 strings */}
                 <line
-                  x1={stringXPositions[0] - 40}
+                  x1={allStringXPositions[0] - 20}
                   y1={y}
-                  x2={stringXPositions[2] + 40}
+                  x2={allStringXPositions[5] + 20}
                   y2={y}
                   stroke={isNut ? '#9ca3af' : '#4b5563'}
                   strokeWidth={isNut ? 4 : 1.5}
@@ -125,7 +142,7 @@ export default function LongFretboardDiagram({
                 {/* Fret number */}
                 {fretIdx % 2 === 0 && (
                   <text
-                    x={stringXPositions[0] - 60}
+                    x={allStringXPositions[0] - 35}
                     y={y - fretHeight / 2}
                     fill="#6b7280"
                     fontSize="14"
@@ -149,14 +166,14 @@ export default function LongFretboardDiagram({
                 {fretIdx === 12 && (
                   <>
                     <circle
-                      cx={stringSpacing * 2}
+                      cx={(allStringXPositions[1] + allStringXPositions[2]) / 2}
                       cy={y - fretHeight / 2}
                       r={6}
                       fill="#374151"
                       opacity={0.5}
                     />
                     <circle
-                      cx={stringSpacing * 3}
+                      cx={(allStringXPositions[3] + allStringXPositions[4]) / 2}
                       cy={y - fretHeight / 2}
                       r={6}
                       fill="#374151"
@@ -168,20 +185,24 @@ export default function LongFretboardDiagram({
             );
           })}
 
-          {/* String lines */}
-          {stringXPositions.map((x, idx) => (
-            <line
-              key={`string-${idx}`}
-              x1={x}
-              y1={fretHeight}
-              x2={x}
-              y2={height - fretHeight / 2}
-              stroke="#9ca3af"
-              strokeWidth="2.5"
-            />
-          ))}
+          {/* String lines - all 6 strings */}
+          {allStringXPositions.map((x, stringIdx) => {
+            const isActive = activeStringIndices.has(stringIdx);
+            return (
+              <line
+                key={`string-${stringIdx}`}
+                x1={x}
+                y1={fretHeight}
+                x2={x}
+                y2={height - fretHeight / 2}
+                stroke={isActive ? '#9ca3af' : '#4b5563'}
+                strokeWidth={isActive ? '2.5' : '1.5'}
+                opacity={isActive ? 1 : 0.3}
+              />
+            );
+          })}
 
-          {/* Voicing dots */}
+          {/* Voicing dots - only on active strings */}
           {voicings.map((voicing, voicingIdx) => {
             const positionColor = POSITION_COLORS[voicing.position];
             const isHighlighted =
@@ -190,35 +211,37 @@ export default function LongFretboardDiagram({
 
             return (
               <g key={`voicing-${voicingIdx}`} opacity={opacity}>
-                {voicing.frets.map((fret, stringIdx) => {
-                  const x = stringXPositions[stringIdx];
+                {voicing.frets.map((fret, localStringIdx) => {
+                  // Map local string index (0-2) to global string index (0-5)
+                  const globalStringIdx = stringGroupIndices[localStringIdx];
+                  const x = allStringXPositions[globalStringIdx];
                   const y =
                     fret === 0
                       ? fretHeight / 2
                       : fretHeight + fret * fretHeight - fretHeight / 2;
 
-                  const notePc = voicing.notes[stringIdx];
+                  const notePc = voicing.notes[localStringIdx];
                   const intervalName = getIntervalName(notePc, triadPcs);
                   const noteColor = NOTE_ROLE_COLORS[intervalName];
-                  const noteName = voicing.noteNames[stringIdx];
+                  const noteName = voicing.noteNames[localStringIdx];
 
                   const isHovered =
                     hoveredDot?.voicingIdx === voicingIdx &&
-                    hoveredDot?.stringIdx === stringIdx;
+                    hoveredDot?.stringIdx === localStringIdx;
 
                   // Check if multiple dots at same position
-                  const key = `${fret}-${stringIdx}`;
+                  const key = `${fret}-${localStringIdx}`;
                   const dotsAtPosition = dotPositions.get(key) || [];
                   const dotIndex = dotsAtPosition.findIndex(
-                    (d) => d.voicingIdx === voicingIdx && d.stringIdx === stringIdx
+                    (d) => d.voicingIdx === voicingIdx && d.stringIdx === localStringIdx
                   );
                   const offsetX = dotsAtPosition.length > 1 ? (dotIndex - 0.5) * 8 : 0;
 
                   return (
                     <g
-                      key={`dot-${voicingIdx}-${stringIdx}`}
+                      key={`dot-${voicingIdx}-${localStringIdx}`}
                       onMouseEnter={() => {
-                        setHoveredDot({ voicingIdx, stringIdx });
+                        setHoveredDot({ voicingIdx, stringIdx: localStringIdx });
                         setHighlightedPosition(voicing.position);
                       }}
                       onMouseLeave={() => {
