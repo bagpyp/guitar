@@ -256,6 +256,13 @@ export default function LongFretboardDiagram({
                   const isDirectHover =
                     hoveredDot?.voicingIdx === voicingIdx &&
                     hoveredDot?.stringIdx === localStringIdx;
+
+                  // Check if another note in the SAME position is directly hovered
+                  const isSamePositionAsDirectHover =
+                    hoveredDot !== null &&
+                    !isDirectHover && // NOT this note
+                    voicing.position === voicings[hoveredDot.voicingIdx].position; // Same position
+
                   const isPositionHovered = hoveredNearPosition === voicing.position;
 
                   // Check if multiple dots at same position
@@ -266,15 +273,16 @@ export default function LongFretboardDiagram({
                   );
                   const offsetX = dotsAtPosition.length > 1 ? (dotIndex - 0.5) * 8 : 0;
 
-                  // Size logic:
-                  // - Normal: 16px
-                  // - Position hover (near): 16 * 1.3 = 20.8px
-                  // - Direct hover: 16 * 1.6 = 25.6px
+                  // Size logic with proper precedence:
+                  // 1. Direct hover on THIS note: 1.6x (takes precedence)
+                  // 2. Direct hover on ANOTHER note in this position: 1.3x (position active)
+                  // 3. Near hover (within 96px) of any note in this position: 1.3x (position active)
+                  // 4. Normal: 16px (1.0x)
                   let radius = 16;
                   if (isDirectHover) {
-                    radius = 16 * 1.6; // 25.6px
-                  } else if (isPositionHovered) {
-                    radius = 16 * 1.3; // 20.8px
+                    radius = 16 * 1.6; // 25.6px - this note is directly hovered
+                  } else if (isSamePositionAsDirectHover || isPositionHovered) {
+                    radius = 16 * 1.3; // 20.8px - position is active
                   }
 
                   return (
