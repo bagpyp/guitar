@@ -351,10 +351,8 @@ export default function LongFretboardDiagram({
               </g>
             );
           })}
-        </svg>
 
-        {/* Inversion symbols below fretboard */}
-        <div className="relative" style={{ width: `${width}px`, height: '30px' }}>
+          {/* Inversion symbols below fretboard as SVG text */}
           {voicings.map((voicing, voicingIdx) => {
             // Get X position of first note in this voicing
             const firstFret = voicing.frets[0];
@@ -365,24 +363,24 @@ export default function LongFretboardDiagram({
                                    voicing.inversion === 'first' ? '⁶' :
                                    '⁶₄';
 
+            if (!inversionSymbol) return null;
+
             return (
-              <div
+              <text
                 key={`inversion-${voicingIdx}`}
-                className="absolute"
-                style={{
-                  left: `${firstX}px`,
-                  top: '5px',
-                  transform: 'translateX(-50%)',
-                  color: '#4a3020',
-                  fontSize: '18px',
-                  fontWeight: 'bold',
-                }}
+                x={firstX}
+                y={height - 10}
+                fill="#4a3020"
+                fontSize="24"
+                fontWeight="bold"
+                textAnchor="middle"
+                dominantBaseline="middle"
               >
                 {inversionSymbol}
-              </div>
+              </text>
             );
           })}
-        </div>
+        </svg>
         </div>
 
         {/* Hover info overlay */}

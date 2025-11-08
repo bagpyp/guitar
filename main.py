@@ -532,47 +532,45 @@ def select_4_positions_coordinated(all_group_voicings: list[list], triad_pcs: tu
     for inv in chains_by_pattern:
         chains_by_pattern[inv].sort(key=lambda x: x[0])
 
-    # Find best inversion for P0/P3 (one that has chains at both low and high frets)
-    inversion_types = ["root", "first", "second"]
-    best_paired_inv = None
-    best_span = 0
+    # Sort ALL chains by avg fret globally
+    all_chains_sorted = [(avg_fret, chain) for chain in chains]
+    all_chains_sorted.sort(key=lambda x: x[0])
 
-    for inv in inversion_types:
-        if inv in chains_by_pattern and len(chains_by_pattern[inv]) >= 2:
-            chains_list = chains_by_pattern[inv]
-            span = chains_list[-1][0] - chains_list[0][0]
-            if span > best_span:
-                best_span = span
-                best_paired_inv = inv
+    # ALWAYS use the absolute lowest chain for P0
+    pos0_chain = all_chains_sorted[0][1]
+    paired_inv = pos0_chain[0]["inversion"]
 
-    if best_paired_inv is None:
-        # Fallback
+    # Find the highest chain with matching inversion for P3
+    pos3_chain = None
+    for avg_fret, chain in reversed(all_chains_sorted):
+        if chain[0]["inversion"] == paired_inv:
+            pos3_chain = chain
+            break
+
+    if pos3_chain is None:
+        # Can't find matching P3, use fallback
         return [select_4_positions(group_voicings) for group_voicings in all_group_voicings]
 
-    # Select 4 chains with inversion constraints
-    other_invs = [inv for inv in inversion_types if inv != best_paired_inv]
+    # Get the other two inversions for P1/P2
+    inversion_types = ["root", "first", "second"]
+    other_invs = [inv for inv in inversion_types if inv != paired_inv]
 
-    selected_chains = []
+    selected_chains = [pos0_chain]
 
-    # Position 0: Lowest chain with paired inversion
-    if best_paired_inv in chains_by_pattern and chains_by_pattern[best_paired_inv]:
-        selected_chains.append(chains_by_pattern[best_paired_inv][0][1])
-
-    # Position 1: Chain from first "other" inversion
+    # Position 1: Lower-middle chain from first "other" inversion
     if other_invs[0] in chains_by_pattern and chains_by_pattern[other_invs[0]]:
         inv1_chains = chains_by_pattern[other_invs[0]]
         idx = min(len(inv1_chains) - 1, len(inv1_chains) // 3)
         selected_chains.append(inv1_chains[idx][1])
 
-    # Position 2: Chain from second "other" inversion
+    # Position 2: Higher-middle chain from second "other" inversion
     if len(other_invs) > 1 and other_invs[1] in chains_by_pattern and chains_by_pattern[other_invs[1]]:
         inv2_chains = chains_by_pattern[other_invs[1]]
         idx = max(0, len(inv2_chains) * 2 // 3)
         selected_chains.append(inv2_chains[idx][1])
 
-    # Position 3: Highest chain with paired inversion
-    if best_paired_inv in chains_by_pattern and chains_by_pattern[best_paired_inv]:
-        selected_chains.append(chains_by_pattern[best_paired_inv][-1][1])
+    # Position 3: Highest chain with matching inversion
+    selected_chains.append(pos3_chain)
 
     # Convert chains to grouped format
     result = [[], [], [], []]  # 4 groups
