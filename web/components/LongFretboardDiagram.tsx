@@ -128,10 +128,10 @@ export default function LongFretboardDiagram({
                   stroke={isNut ? '#e8dcc8' : '#b8b8b8'}
                   strokeWidth={isNut ? 4 : 2}
                 />
-                {/* Fret markers (3, 5, 7, 9, 12, 15, 17) - pearl inlays */}
+                {/* Fret markers (3, 5, 7, 9, 15, 17) - pearl inlays */}
                 {[3, 5, 7, 9, 15, 17].includes(fretIdx) && fretIdx < numFrets && (
                   <circle
-                    cx={(x + fretXPositions[fretIdx + 1]) / 2}
+                    cx={getNoteYPosition(fretIdx, fretXPositions, startFret)}
                     cy={height / 2}
                     r={10}
                     fill="#f5f5dc"
@@ -144,7 +144,7 @@ export default function LongFretboardDiagram({
                 {fretIdx === 12 && (
                   <>
                     <circle
-                      cx={(x + fretXPositions[fretIdx + 1]) / 2}
+                      cx={getNoteYPosition(12, fretXPositions, startFret)}
                       cy={(allStringYPositions[1] + allStringYPositions[2]) / 2}
                       r={10}
                       fill="#f5f5dc"
@@ -153,7 +153,7 @@ export default function LongFretboardDiagram({
                       strokeWidth={1}
                     />
                     <circle
-                      cx={(x + fretXPositions[fretIdx + 1]) / 2}
+                      cx={getNoteYPosition(12, fretXPositions, startFret)}
                       cy={(allStringYPositions[3] + allStringYPositions[4]) / 2}
                       r={10}
                       fill="#f5f5dc"
@@ -195,7 +195,7 @@ export default function LongFretboardDiagram({
           })}
 
           {/* Chromatic background - all notes on ALL 6 strings (faint) */}
-          <g opacity={0.3}>
+          <g>
             {allStringYPositions.map((y, globalStringIdx) => {
               return Array.from({ length: numFrets + 1 }).map((_, fretIdx) => {
                 const x = getNoteYPosition(fretIdx, fretXPositions, startFret);
@@ -208,19 +208,21 @@ export default function LongFretboardDiagram({
                     <circle
                       cx={x}
                       cy={y}
-                      r={8}
+                      r={16}
                       fill={noteColor.bg}
+                      opacity={0.3}
                     />
                     {/* Note name text */}
                     <text
                       x={x}
                       y={y}
                       fill={noteColor.text}
-                      fontSize="9"
+                      fontSize="12"
                       fontWeight="bold"
                       textAnchor="middle"
                       dominantBaseline="middle"
                       pointerEvents="none"
+                      opacity={0.3}
                     >
                       {noteName}
                     </text>
