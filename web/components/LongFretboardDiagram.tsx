@@ -105,9 +105,9 @@ export default function LongFretboardDiagram({
           {/* Fretboard wood - slightly narrower than frets */}
           <rect
             x={0}
-            y={allStringYPositions[0] - 15}
+            y={allStringYPositions[5] - 15}
             width={width}
-            height={allStringYPositions[5] - allStringYPositions[0] + 30}
+            height={allStringYPositions[0] - allStringYPositions[5] + 30}
             fill="#3d2817"
             rx={8}
           />
