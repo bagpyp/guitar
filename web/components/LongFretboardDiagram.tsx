@@ -232,7 +232,42 @@ export default function LongFretboardDiagram({
             })}
           </g>
 
-          {/* Voicing dots - triad notes on active strings */}
+          {/* Layer 1: Position hover detection areas (background) */}
+          <g>
+            {voicings.map((voicing, voicingIdx) => {
+              return voicing.frets.map((fret, localStringIdx) => {
+                const globalStringIdx = stringGroupIndices[localStringIdx];
+                const y = allStringYPositions[globalStringIdx];
+                const x = getNoteYPosition(fret, fretXPositions, startFret);
+
+                const key = `${fret}-${localStringIdx}`;
+                const dotsAtPosition = dotPositions.get(key) || [];
+                const dotIndex = dotsAtPosition.findIndex(
+                  (d) => d.voicingIdx === voicingIdx && d.stringIdx === localStringIdx
+                );
+                const offsetX = dotsAtPosition.length > 1 ? (dotIndex - 0.5) * 8 : 0;
+
+                return (
+                  <circle
+                    key={`position-hover-${voicingIdx}-${localStringIdx}`}
+                    cx={x + offsetX}
+                    cy={y}
+                    r={96}
+                    fill="transparent"
+                    style={{ cursor: 'pointer' }}
+                    onMouseEnter={() => {
+                      setHoveredNearPosition(voicing.position);
+                    }}
+                    onMouseLeave={() => {
+                      setHoveredNearPosition(null);
+                    }}
+                  />
+                );
+              });
+            })}
+          </g>
+
+          {/* Layer 2: Voicing dots - triad notes on active strings (foreground) */}
           {voicings.map((voicing, voicingIdx) => {
             const positionColor = POSITION_COLORS[voicing.position];
 
@@ -288,37 +323,8 @@ export default function LongFretboardDiagram({
                   return (
                     <g
                       key={`dot-${voicingIdx}-${localStringIdx}`}
-                      style={{ cursor: 'pointer' }}
                       transform={`translate(${offsetX}, 0)`}
                     >
-                      {/* Expanded hover detection area (6x radius for wide gaps) */}
-                      <circle
-                        cx={x}
-                        cy={y}
-                        r={96}
-                        fill="transparent"
-                        onMouseEnter={() => {
-                          setHoveredNearPosition(voicing.position);
-                        }}
-                        onMouseLeave={() => {
-                          setHoveredNearPosition(null);
-                        }}
-                      />
-                      {/* Direct hover detection area */}
-                      <circle
-                        cx={x}
-                        cy={y}
-                        r={26}
-                        fill="transparent"
-                        onMouseEnter={() => {
-                          setHoveredDot({ voicingIdx, stringIdx: localStringIdx });
-                          setHighlightedPosition(voicing.position);
-                        }}
-                        onMouseLeave={() => {
-                          setHoveredDot(null);
-                          setHighlightedPosition(null);
-                        }}
-                      />
                       {/* Root note gold ring */}
                       {isRoot && (
                         <circle
@@ -328,9 +334,10 @@ export default function LongFretboardDiagram({
                           fill="none"
                           stroke="#ffd700"
                           strokeWidth={2}
+                          pointerEvents="none"
                         />
                       )}
-                      {/* Note color dot */}
+                      {/* Note color dot - handles direct hover */}
                       <circle
                         cx={x}
                         cy={y}
@@ -338,7 +345,15 @@ export default function LongFretboardDiagram({
                         fill={noteColor.bg}
                         stroke={isDirectHover ? '#fbbf24' : 'none'}
                         strokeWidth={isDirectHover ? 3 : 0}
-                        pointerEvents="none"
+                        style={{ cursor: 'pointer' }}
+                        onMouseEnter={() => {
+                          setHoveredDot({ voicingIdx, stringIdx: localStringIdx });
+                          setHighlightedPosition(voicing.position);
+                        }}
+                        onMouseLeave={() => {
+                          setHoveredDot(null);
+                          setHighlightedPosition(null);
+                        }}
                       />
                       {/* Note name text */}
                       <text
