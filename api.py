@@ -191,17 +191,24 @@ def get_triads(key: str) -> TriadsResponse:
         [3, 4, 5],  # Strings 3-2-1 (G-B-E)
     ]
 
+    # Find all voicings for all groups first (for coordination)
+    all_group_voicings = []
+    for string_group_indices in string_groups_data:
+        all_voicings = find_all_triad_voicings(triad_pcs, string_group_indices, fretboard)
+        all_group_voicings.append(all_voicings)
+
+    # Select positions using coordinated algorithm
+    from main import select_4_positions_coordinated
+    selected_by_group = select_4_positions_coordinated(all_group_voicings, triad_pcs)
+
     string_groups_result = []
 
-    for string_group_indices in string_groups_data:
+    for group_idx, string_group_indices in enumerate(string_groups_data):
         # Get string names for this group
         group_string_names = [STRING_NAMES[idx] for idx in string_group_indices]
 
-        # Find all voicings on this string group
-        all_voicings = find_all_triad_voicings(triad_pcs, string_group_indices, fretboard)
-
-        # Select 4 representative positions
-        selected_voicings = select_4_positions(all_voicings)
+        # Get the selected voicings for this group
+        selected_voicings = selected_by_group[group_idx]
 
         # Convert to Pydantic models
         voicing_models = [

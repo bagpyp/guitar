@@ -449,17 +449,151 @@ def find_all_triad_voicings(triad_pcs: list, string_group: list, fretboard: dict
     return voicings
 
 
+def voicings_share_notes(v1: dict, v2: dict) -> bool:
+    """
+    Check if two voicings from adjacent groups share notes on overlapping strings.
+
+    v1 is from group k (strings [a, b, c])
+    v2 is from group k+1 (strings [b, c, d])
+    They should share notes on strings b and c.
+    """
+    # v1's last 2 notes should match v2's first 2 notes
+    return (v1["notes"][1:3] == v2["notes"][0:2] and
+            v1["frets"][1:3] == v2["frets"][0:2])
+
+
+def find_voicing_chains(all_group_voicings: list[list]) -> list[list]:
+    """
+    Find sequences of voicings that share notes across all 4 groups.
+
+    Returns: List of chains, where each chain is [v0, v1, v2, v3]
+              representing a voicing from each of the 4 groups that share notes.
+    """
+    chains = []
+
+    # Start with every voicing in group 0
+    for v0 in all_group_voicings[0]:
+        # Try to find matching voicings in subsequent groups
+        for v1 in all_group_voicings[1]:
+            if not voicings_share_notes(v0, v1):
+                continue
+
+            for v2 in all_group_voicings[2]:
+                if not voicings_share_notes(v1, v2):
+                    continue
+
+                for v3 in all_group_voicings[3]:
+                    if not voicings_share_notes(v2, v3):
+                        continue
+
+                    # Found a complete chain!
+                    chains.append([v0, v1, v2, v3])
+
+    return chains
+
+
+def select_4_positions_coordinated(all_group_voicings: list[list], triad_pcs: tuple) -> list[list]:
+    """
+    Select 4 positions across all 4 string groups with coordination.
+
+    Ensures:
+    1. Positions 0 & 3 have same inversion type
+    2. Positions 1 & 2 have the other two inversion types
+    3. Adjacent groups share notes on overlapping strings
+
+    Args:
+        all_group_voicings: List of 4 lists, one for each string group (unsorted, unfiltered)
+        triad_pcs: [root, third, fifth] pitch classes
+
+    Returns:
+        List of 4 lists, each with 4 selected voicings
+    """
+    # Find all valid chains
+    chains = find_voicing_chains(all_group_voicings)
+
+    if len(chains) < 4:
+        # Fallback: not enough chains, use independent selection
+        return [select_4_positions(group_voicings) for group_voicings in all_group_voicings]
+
+    # Group chains by inversion pattern
+    chains_by_pattern = {}
+    for chain in chains:
+        # Get avg fret for sorting
+        avg_fret = sum(v["avg_fret"] for v in chain) / 4
+
+        # Get inversion of first group (they should all be similar in a chain)
+        inv = chain[0]["inversion"]
+
+        if inv not in chains_by_pattern:
+            chains_by_pattern[inv] = []
+        chains_by_pattern[inv].append((avg_fret, chain))
+
+    # Sort chains within each inversion group by avg fret
+    for inv in chains_by_pattern:
+        chains_by_pattern[inv].sort(key=lambda x: x[0])
+
+    # Find best inversion for P0/P3 (one that has chains at both low and high frets)
+    inversion_types = ["root", "first", "second"]
+    best_paired_inv = None
+    best_span = 0
+
+    for inv in inversion_types:
+        if inv in chains_by_pattern and len(chains_by_pattern[inv]) >= 2:
+            chains_list = chains_by_pattern[inv]
+            span = chains_list[-1][0] - chains_list[0][0]
+            if span > best_span:
+                best_span = span
+                best_paired_inv = inv
+
+    if best_paired_inv is None:
+        # Fallback
+        return [select_4_positions(group_voicings) for group_voicings in all_group_voicings]
+
+    # Select 4 chains with inversion constraints
+    other_invs = [inv for inv in inversion_types if inv != best_paired_inv]
+
+    selected_chains = []
+
+    # Position 0: Lowest chain with paired inversion
+    if best_paired_inv in chains_by_pattern and chains_by_pattern[best_paired_inv]:
+        selected_chains.append(chains_by_pattern[best_paired_inv][0][1])
+
+    # Position 1: Chain from first "other" inversion
+    if other_invs[0] in chains_by_pattern and chains_by_pattern[other_invs[0]]:
+        inv1_chains = chains_by_pattern[other_invs[0]]
+        idx = min(len(inv1_chains) - 1, len(inv1_chains) // 3)
+        selected_chains.append(inv1_chains[idx][1])
+
+    # Position 2: Chain from second "other" inversion
+    if len(other_invs) > 1 and other_invs[1] in chains_by_pattern and chains_by_pattern[other_invs[1]]:
+        inv2_chains = chains_by_pattern[other_invs[1]]
+        idx = max(0, len(inv2_chains) * 2 // 3)
+        selected_chains.append(inv2_chains[idx][1])
+
+    # Position 3: Highest chain with paired inversion
+    if best_paired_inv in chains_by_pattern and chains_by_pattern[best_paired_inv]:
+        selected_chains.append(chains_by_pattern[best_paired_inv][-1][1])
+
+    # Convert chains to grouped format
+    result = [[], [], [], []]  # 4 groups
+    for pos_idx, chain in enumerate(selected_chains):
+        for group_idx, voicing in enumerate(chain):
+            voicing_copy = voicing.copy()
+            voicing_copy["position"] = pos_idx
+            result[group_idx].append(voicing_copy)
+
+    return result
+
+
 def select_4_positions(voicings: list) -> list:
     """
     Select 4 representative voicings spanning the fretboard (positions 0-3).
 
-    Uses a quartile-based approach to ensure even distribution:
-    - Position 0: ~0th percentile (lowest voicing)
-    - Position 1: ~33rd percentile
-    - Position 2: ~66th percentile
-    - Position 3: ~100th percentile (highest voicing)
+    New inversion-based approach:
+    - Positions 0 & 3: Same inversion type (low and high on neck)
+    - Positions 1 & 2: The other two inversion types
 
-    This ensures we don't skip voicings in the middle range.
+    This creates musically coherent patterns while spanning the fretboard.
 
     Returns: list of up to 4 voicings, each with added "position" key (0-3)
     """
@@ -479,22 +613,78 @@ def select_4_positions(voicings: list) -> list:
             selected.append(voicing)
         return selected
 
-    # Calculate indices for 4 evenly distributed positions
-    # We want to pick voicings at roughly 0%, 25%, 50%, 75% through the sorted list
-    # Using round() for better distribution (e.g., with 5 voicings: [0, 1, 2, 3])
-    # Note: We use (n-1) to distribute across the INDEX RANGE, not the COUNT
-    indices = [
-        0,                          # Position 0: 0% (first)
-        round((n - 1) / 4),         # Position 1: 25%
-        round(2 * (n - 1) / 4),     # Position 2: 50%
-        round(3 * (n - 1) / 4)      # Position 3: 75%
-    ]
+    # Group voicings by inversion type
+    by_inversion = {"root": [], "first": [], "second": []}
+    for v in sorted_voicings:
+        inv_type = v.get("inversion", "unknown")
+        if inv_type in by_inversion:
+            by_inversion[inv_type].append(v)
 
+    # Find which inversion type has voicings in both low and high ranges
+    # This will be used for positions 0 & 3
+    inversion_types = ["root", "first", "second"]
+    best_paired_inversion = None
+    best_span = 0
+
+    for inv_type in inversion_types:
+        if len(by_inversion[inv_type]) >= 2:
+            inv_voicings = by_inversion[inv_type]
+            span = inv_voicings[-1]["avg_fret"] - inv_voicings[0]["avg_fret"]
+            if span > best_span:
+                best_span = span
+                best_paired_inversion = inv_type
+
+    # Fallback: if no inversion spans well, use old algorithm
+    if best_paired_inversion is None or best_span < 3:
+        indices = [
+            0,
+            round((n - 1) / 4),
+            round(2 * (n - 1) / 4),
+            round(3 * (n - 1) / 4)
+        ]
+        selected = []
+        for position_idx, voicing_idx in enumerate(indices):
+            voicing = sorted_voicings[voicing_idx].copy()
+            voicing["position"] = position_idx
+            selected.append(voicing)
+        return selected
+
+    # Get the other two inversions for positions 1 & 2
+    other_inversions = [inv for inv in inversion_types if inv != best_paired_inversion]
+
+    # Select positions with inversion constraints
     selected = []
-    for position_idx, voicing_idx in enumerate(indices):
-        voicing = sorted_voicings[voicing_idx].copy()
-        voicing["position"] = position_idx
-        selected.append(voicing)
+
+    # Position 0: Lowest voicing with paired inversion
+    paired_voicings = by_inversion[best_paired_inversion]
+    if paired_voicings:
+        pos0 = paired_voicings[0].copy()
+        pos0["position"] = 0
+        selected.append(pos0)
+
+    # Position 1: Lower voicing from first "other" inversion
+    if other_inversions[0] and by_inversion[other_inversions[0]]:
+        inv1_voicings = by_inversion[other_inversions[0]]
+        # Pick from lower half
+        idx = min(len(inv1_voicings) - 1, len(inv1_voicings) // 3)
+        pos1 = inv1_voicings[idx].copy()
+        pos1["position"] = 1
+        selected.append(pos1)
+
+    # Position 2: Higher voicing from second "other" inversion
+    if len(other_inversions) > 1 and by_inversion[other_inversions[1]]:
+        inv2_voicings = by_inversion[other_inversions[1]]
+        # Pick from upper half
+        idx = max(0, len(inv2_voicings) * 2 // 3)
+        pos2 = inv2_voicings[idx].copy()
+        pos2["position"] = 2
+        selected.append(pos2)
+
+    # Position 3: Highest voicing with paired inversion
+    if paired_voicings:
+        pos3 = paired_voicings[-1].copy()
+        pos3["position"] = 3
+        selected.append(pos3)
 
     return selected
 

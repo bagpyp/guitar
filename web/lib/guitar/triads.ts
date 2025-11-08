@@ -147,6 +147,136 @@ export function findAllTriadVoicings(
  * @param voicings Array of voicings to select from
  * @returns Array of up to 4 voicings, each with added "position" key (0-3)
  */
+function voicingsShareNotes(
+  v1: Omit<TriadVoicing, 'position'>,
+  v2: Omit<TriadVoicing, 'position'>
+): boolean {
+  // v1's last 2 notes should match v2's first 2 notes
+  return (
+    v1.notes[1] === v2.notes[0] &&
+    v1.notes[2] === v2.notes[1] &&
+    v1.frets[1] === v2.frets[0] &&
+    v1.frets[2] === v2.frets[1]
+  );
+}
+
+function findVoicingChains(
+  allGroupVoicings: Array<Omit<TriadVoicing, 'position'>[]>
+): Array<Omit<TriadVoicing, 'position'>[]> {
+  const chains: Array<Omit<TriadVoicing, 'position'>[]> = [];
+
+  // Start with every voicing in group 0
+  for (const v0 of allGroupVoicings[0]) {
+    for (const v1 of allGroupVoicings[1]) {
+      if (!voicingsShareNotes(v0, v1)) continue;
+
+      for (const v2 of allGroupVoicings[2]) {
+        if (!voicingsShareNotes(v1, v2)) continue;
+
+        for (const v3 of allGroupVoicings[3]) {
+          if (!voicingsShareNotes(v2, v3)) continue;
+
+          // Found a complete chain!
+          chains.push([v0, v1, v2, v3]);
+        }
+      }
+    }
+  }
+
+  return chains;
+}
+
+export function select4PositionsCoordinated(
+  allGroupVoicings: Array<Omit<TriadVoicing, 'position'>[]>,
+  triadPcs: [number, number, number]
+): TriadVoicing[][] {
+  // Find all valid chains
+  const chains = findVoicingChains(allGroupVoicings);
+
+  if (chains.length < 4) {
+    // Fallback: not enough chains
+    return allGroupVoicings.map(v => select4Positions(v));
+  }
+
+  // Group chains by inversion pattern
+  const chainsByPattern: Record<InversionType, Array<{avgFret: number; chain: Omit<TriadVoicing, 'position'>[]}>> = {
+    root: [],
+    first: [],
+    second: [],
+    unknown: [],
+  };
+
+  for (const chain of chains) {
+    const avgFret = chain.reduce((sum, v) => sum + v.avgFret, 0) / 4;
+    const inv = chain[0].inversion;
+    chainsByPattern[inv].push({ avgFret, chain });
+  }
+
+  // Sort chains within each inversion group by avg fret
+  for (const inv in chainsByPattern) {
+    chainsByPattern[inv as InversionType].sort((a, b) => a.avgFret - b.avgFret);
+  }
+
+  // Find best inversion for P0/P3
+  const inversionTypes: InversionType[] = ['root', 'first', 'second'];
+  let bestPairedInv: InversionType | null = null;
+  let bestSpan = 0;
+
+  for (const inv of inversionTypes) {
+    const chainsList = chainsByPattern[inv];
+    if (chainsList.length >= 2) {
+      const span = chainsList[chainsList.length - 1].avgFret - chainsList[0].avgFret;
+      if (span > bestSpan) {
+        bestSpan = span;
+        bestPairedInv = inv;
+      }
+    }
+  }
+
+  if (bestPairedInv === null) {
+    return allGroupVoicings.map(v => select4Positions(v));
+  }
+
+  // Select 4 chains with inversion constraints
+  const otherInvs = inversionTypes.filter(inv => inv !== bestPairedInv);
+  const selectedChains: Array<Omit<TriadVoicing, 'position'>[]> = [];
+
+  // Position 0: Lowest chain with paired inversion
+  if (chainsByPattern[bestPairedInv].length > 0) {
+    selectedChains.push(chainsByPattern[bestPairedInv][0].chain);
+  }
+
+  // Position 1: Chain from first "other" inversion
+  if (otherInvs[0] && chainsByPattern[otherInvs[0]].length > 0) {
+    const inv1Chains = chainsByPattern[otherInvs[0]];
+    const idx = Math.min(inv1Chains.length - 1, Math.floor(inv1Chains.length / 3));
+    selectedChains.push(inv1Chains[idx].chain);
+  }
+
+  // Position 2: Chain from second "other" inversion
+  if (otherInvs.length > 1 && chainsByPattern[otherInvs[1]].length > 0) {
+    const inv2Chains = chainsByPattern[otherInvs[1]];
+    const idx = Math.max(0, Math.floor(inv2Chains.length * 2 / 3));
+    selectedChains.push(inv2Chains[idx].chain);
+  }
+
+  // Position 3: Highest chain with paired inversion
+  if (chainsByPattern[bestPairedInv].length > 0) {
+    const chains = chainsByPattern[bestPairedInv];
+    selectedChains.push(chains[chains.length - 1].chain);
+  }
+
+  // Convert chains to grouped format
+  const result: TriadVoicing[][] = [[], [], [], []];
+  selectedChains.forEach((chain, posIdx) => {
+    chain.forEach((voicing, groupIdx) => {
+      result[groupIdx].push({ ...voicing, position: posIdx });
+    });
+  });
+
+  return result;
+}
+
 export function select4Positions(
   voicings: Omit<TriadVoicing, 'position'>[]
 ): TriadVoicing[] {
@@ -163,22 +293,78 @@ export function select4Positions(
     return sortedVoicings.map((v, idx) => ({ ...v, position: idx }));
   }
 
-  // Calculate indices for 4 evenly distributed positions
-  // We want to pick voicings at roughly 0%, 25%, 50%, 75% through the sorted list
-  // Using Math.round() for better distribution (e.g., with 5 voicings: [0, 1, 2, 3])
-  // Note: We use (n-1) to distribute across the INDEX RANGE, not the COUNT
-  const indices = [
-    0,                              // Position 0: 0% (first)
-    Math.round((n - 1) / 4),        // Position 1: 25%
-    Math.round((2 * (n - 1)) / 4),  // Position 2: 50%
-    Math.round((3 * (n - 1)) / 4),  // Position 3: 75%
-  ];
+  // Group voicings by inversion type
+  const byInversion: Record<InversionType, Array<Omit<TriadVoicing, 'position'>>> = {
+    root: [],
+    first: [],
+    second: [],
+    unknown: [],
+  };
 
+  sortedVoicings.forEach(v => {
+    byInversion[v.inversion].push(v);
+  });
+
+  // Find which inversion type has voicings in both low and high ranges
+  // This will be used for positions 0 & 3
+  const inversionTypes: InversionType[] = ['root', 'first', 'second'];
+  let bestPairedInversion: InversionType | null = null;
+  let bestSpan = 0;
+
+  for (const invType of inversionTypes) {
+    const invVoicings = byInversion[invType];
+    if (invVoicings.length >= 2) {
+      const span = invVoicings[invVoicings.length - 1].avgFret - invVoicings[0].avgFret;
+      if (span > bestSpan) {
+        bestSpan = span;
+        bestPairedInversion = invType;
+      }
+    }
+  }
+
+  // Fallback: if no inversion spans well, use old algorithm
+  if (bestPairedInversion === null || bestSpan < 3) {
+    const indices = [
+      0,
+      Math.round((n - 1) / 4),
+      Math.round((2 * (n - 1)) / 4),
+      Math.round((3 * (n - 1)) / 4),
+    ];
+    return indices.map((voicingIdx, positionIdx) => ({
+      ...sortedVoicings[voicingIdx],
+      position: positionIdx,
+    }));
+  }
+
+  // Get the other two inversions for positions 1 & 2
+  const otherInversions = inversionTypes.filter(inv => inv !== bestPairedInversion);
+
+  // Select positions with inversion constraints
   const selected: TriadVoicing[] = [];
-  for (let positionIdx = 0; positionIdx < indices.length; positionIdx++) {
-    const voicingIdx = indices[positionIdx];
-    const voicing = { ...sortedVoicings[voicingIdx], position: positionIdx };
-    selected.push(voicing);
+
+  // Position 0: Lowest voicing with paired inversion
+  const pairedVoicings = byInversion[bestPairedInversion];
+  if (pairedVoicings.length > 0) {
+    selected.push({ ...pairedVoicings[0], position: 0 });
+  }
+
+  // Position 1: Lower voicing from first "other" inversion
+  if (otherInversions[0] && byInversion[otherInversions[0]].length > 0) {
+    const inv1Voicings = byInversion[otherInversions[0]];
+    const idx = Math.min(inv1Voicings.length - 1, Math.floor(inv1Voicings.length / 3));
+    selected.push({ ...inv1Voicings[idx], position: 1 });
+  }
+
+  // Position 2: Higher voicing from second "other" inversion
+  if (otherInversions.length > 1 && byInversion[otherInversions[1]].length > 0) {
+    const inv2Voicings = byInversion[otherInversions[1]];
+    const idx = Math.max(0, Math.floor(inv2Voicings.length * 2 / 3));
+    selected.push({ ...inv2Voicings[idx], position: 2 });
+  }
+
+  // Position 3: Highest voicing with paired inversion
+  if (pairedVoicings.length > 0) {
+    selected.push({ ...pairedVoicings[pairedVoicings.length - 1], position: 3 });
   }
 
   return selected;
@@ -203,14 +389,17 @@ export function generateTriadsData(key: NoteName): TriadsData {
 
   const STRING_NAMES = ['E', 'A', 'D', 'G', 'B', 'E'];
 
-  const stringGroups: StringGroupTriads[] = stringGroupsData.map(stringGroupIndices => {
+  // Find all voicings for all groups first (for coordination)
+  const allGroupVoicings = stringGroupsData.map(stringGroupIndices =>
+    findAllTriadVoicings(triadPcs, stringGroupIndices, fretboard)
+  );
+
+  // Select positions using coordinated algorithm
+  const selectedByGroup = select4PositionsCoordinated(allGroupVoicings, triadPcs);
+
+  const stringGroups: StringGroupTriads[] = stringGroupsData.map((stringGroupIndices, groupIdx) => {
     const groupStringNames = stringGroupIndices.map(idx => STRING_NAMES[idx]);
-
-    // Find all voicings on this string group
-    const allVoicings = findAllTriadVoicings(triadPcs, stringGroupIndices, fretboard);
-
-    // Select 4 representative positions
-    const selectedVoicings = select4Positions(allVoicings);
+    const selectedVoicings = selectedByGroup[groupIdx];
 
     return {
       strings: [...stringGroupIndices],
