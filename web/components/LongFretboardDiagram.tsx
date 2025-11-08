@@ -234,18 +234,8 @@ export default function LongFretboardDiagram({
           {voicings.map((voicing, voicingIdx) => {
             const positionColor = POSITION_COLORS[voicing.position];
 
-            // Opacity logic:
-            // - If no hover: all triad notes at 70%
-            // - If hovering near: hovered position at 100%, other positions at 70%
-            // - Background chromatic notes stay at 30% (set above)
-            let opacity = 0.7; // Default for non-hovered triad positions
-            if (hoveredNearPosition === null && highlightedPosition === null) {
-              opacity = 0.7; // No hover - all triad positions visible at 70%
-            } else if (hoveredNearPosition === voicing.position || highlightedPosition === voicing.position) {
-              opacity = 1.0; // Hovered position - full brightness
-            } else {
-              opacity = 0.7; // Other positions - still visible but dimmer
-            }
+            // All triad notes always at 100% opacity
+            const opacity = 1.0;
 
             return (
               <g key={`voicing-${voicingIdx}`} opacity={opacity}>
@@ -275,14 +265,14 @@ export default function LongFretboardDiagram({
                   const offsetX = dotsAtPosition.length > 1 ? (dotIndex - 0.5) * 8 : 0;
 
                   // Size logic:
-                  // - Direct hover: 18px
-                  // - Position hover (near): 17px
                   // - Normal: 16px
+                  // - Position hover (near): 16 * 1.3 = 20.8px
+                  // - Direct hover: 16 * 1.6 = 25.6px
                   let radius = 16;
                   if (isDirectHover) {
-                    radius = 18;
+                    radius = 16 * 1.6; // 25.6px
                   } else if (isPositionHovered) {
-                    radius = 17;
+                    radius = 16 * 1.3; // 20.8px
                   }
 
                   return (
@@ -308,7 +298,7 @@ export default function LongFretboardDiagram({
                       <circle
                         cx={x}
                         cy={y}
-                        r={18}
+                        r={26}
                         fill="transparent"
                         onMouseEnter={() => {
                           setHoveredDot({ voicingIdx, stringIdx: localStringIdx });

@@ -88,30 +88,31 @@ export function calculateFretYPositions(
 }
 
 /**
- * Calculate the Y position for a note at a specific fret
- * Position is midway between the fret and the previous fret
+ * Calculate the position for a note at a specific fret
+ * Position is slightly toward the previous fret (where you'd press on a real guitar)
  *
  * @param fret - Fret number (0 = open string, on the nut)
- * @param fretYPositions - Array of Y positions for fret lines
+ * @param fretPositions - Array of positions for fret lines (X or Y)
  * @param startFret - First fret in the display range
- * @returns Y coordinate for the note
+ * @returns Coordinate for the note
  */
 export function getNoteYPosition(
   fret: number,
-  fretYPositions: number[],
+  fretPositions: number[],
   startFret: number
 ): number {
   const fretIndex = fret - startFret;
 
   if (fret === 0) {
     // Open string - place on the nut line
-    return fretYPositions[0];
+    return fretPositions[0];
   }
 
-  // Note is midway between previous fret and current fret
-  const prevY = fretYPositions[fretIndex - 1] || 0;
-  const currentY = fretYPositions[fretIndex];
-  return (prevY + currentY) / 2;
+  // Note is 35% from previous fret, 65% toward current fret
+  // (slightly left/behind the fret, where you'd press on a real guitar)
+  const prevPos = fretPositions[fretIndex - 1] || 0;
+  const currentPos = fretPositions[fretIndex];
+  return prevPos + (currentPos - prevPos) * 0.65;
 }
 
 /**

@@ -111,9 +111,9 @@ describe('Fretboard Physics', () => {
       expect(y1).toBeLessThan(fretYPositions[1]);
     });
 
-    it('should return midpoint between frets', () => {
+    it('should return position 65% toward fret (realistic finger placement)', () => {
       const y5 = getNoteYPosition(5, fretYPositions, 0);
-      const expectedY = (fretYPositions[4] + fretYPositions[5]) / 2;
+      const expectedY = fretYPositions[4] + (fretYPositions[5] - fretYPositions[4]) * 0.65;
 
       expect(y5).toBeCloseTo(expectedY, 1);
     });
