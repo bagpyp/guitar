@@ -283,11 +283,11 @@ export default function LongFretboardDiagram({
                       style={{ cursor: 'pointer' }}
                       transform={`translate(${offsetX}, 0)`}
                     >
-                      {/* Expanded hover detection area (3x radius) */}
+                      {/* Expanded hover detection area (6x radius for wide gaps) */}
                       <circle
                         cx={x}
                         cy={y}
-                        r={48}
+                        r={96}
                         fill="transparent"
                         onMouseEnter={() => {
                           setHoveredNearPosition(voicing.position);
@@ -352,6 +352,37 @@ export default function LongFretboardDiagram({
             );
           })}
         </svg>
+
+        {/* Inversion symbols below fretboard */}
+        <div className="relative" style={{ width: `${width}px`, height: '30px' }}>
+          {voicings.map((voicing, voicingIdx) => {
+            // Get X position of first note in this voicing
+            const firstFret = voicing.frets[0];
+            const firstX = getNoteYPosition(firstFret, fretXPositions, startFret);
+
+            // Map inversion to music theory symbol
+            const inversionSymbol = voicing.inversion === 'root' ? '' :
+                                   voicing.inversion === 'first' ? '⁶' :
+                                   '⁶₄';
+
+            return (
+              <div
+                key={`inversion-${voicingIdx}`}
+                className="absolute"
+                style={{
+                  left: `${firstX}px`,
+                  top: '5px',
+                  transform: 'translateX(-50%)',
+                  color: '#4a3020',
+                  fontSize: '18px',
+                  fontWeight: 'bold',
+                }}
+              >
+                {inversionSymbol}
+              </div>
+            );
+          })}
+        </div>
         </div>
 
         {/* Hover info overlay */}
