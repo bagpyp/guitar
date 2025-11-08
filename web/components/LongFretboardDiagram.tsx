@@ -53,8 +53,8 @@ export default function LongFretboardDiagram({
   const stringGroupIndices = voicings.length > 0 ? voicings[0].strings : [3, 4, 5];
 
   // SVG dimensions - rotated 90 degrees (now horizontal)
-  const width = 1000; // Now the long dimension (frets span left-right)
-  const height = 450; // Now the short dimension (strings span top-bottom)
+  const width = 1400; // Full page width (frets span left-right)
+  const height = 400; // Compact height (strings span top-bottom)
   const numFrets = 18; // Show frets 0-17 (cut off high frets near sound hole)
   const startFret = 0;
   const stringSpacing = height / 7; // Space for 6 strings with margins
@@ -91,9 +91,10 @@ export default function LongFretboardDiagram({
   });
 
   return (
-    <div className="flex flex-col items-center gap-4 p-6 rounded-lg border min-w-fit" style={{ backgroundColor: '#d4a574', borderColor: '#b8935f' }}>
+    <div className="flex flex-col items-center gap-4 p-6 rounded-lg border w-full" style={{ backgroundColor: '#d4a574', borderColor: '#b8935f' }}>
       {/* SVG Long Fretboard */}
-      <div className="relative">
+      <div className="relative w-full">
+        <div className="w-full overflow-x-auto">
         <svg
           width={width}
           height={height}
@@ -358,6 +359,7 @@ export default function LongFretboardDiagram({
             );
           })}
         </svg>
+        </div>
 
         {/* Hover info overlay */}
         {hoveredDot !== null && (
