@@ -2,6 +2,8 @@
 
 import React, { useState } from 'react';
 import type { TriadVoicing } from '../lib/guitar/triads';
+import { calculateFretYPositions, getNoteYPosition, getStringThickness, getNoteAtPosition } from '../lib/guitar/fretboard-physics';
+import { getNoteColor, getAllNoteColorsInCircleOfFifths } from '../lib/guitar/note-colors';
 
 interface LongFretboardDiagramProps {
   voicings: TriadVoicing[]; // All 4 positions for this string group
@@ -21,16 +23,7 @@ const POSITION_COLORS = [
 ];
 
 /**
- * Note role colors for the dots
- */
-const NOTE_ROLE_COLORS: Record<string, { bg: string; text: string }> = {
-  root: { bg: '#ef4444', text: '#ffffff' },   // Red
-  third: { bg: '#eab308', text: '#ffffff' },  // Yellow
-  fifth: { bg: '#3b82f6', text: '#ffffff' },  // Blue
-};
-
-/**
- * Get the interval name for a note pitch class
+ * Get the interval name for a note pitch class (for hover info)
  */
 function getIntervalName(notePc: number, triadPcs: [number, number, number]): 'root' | 'third' | 'fifth' {
   const [root, third, fifth] = triadPcs;
@@ -53,6 +46,7 @@ export default function LongFretboardDiagram({
     voicingIdx: number;
     stringIdx: number;
   } | null>(null);
+  const [hoveredNearPosition, setHoveredNearPosition] = useState<number | null>(null);
   const [highlightedPosition, setHighlightedPosition] = useState<number | null>(null);
 
   // Get the string group indices (e.g., [3, 4, 5] for strings 3-2-1)
@@ -61,9 +55,12 @@ export default function LongFretboardDiagram({
   // SVG dimensions for long neck - wider to show all 6 strings
   const width = 450;
   const height = 1000;
-  const numFrets = 21; // Show frets 0-20
-  const fretHeight = height / (numFrets + 1);
+  const numFrets = 18; // Show frets 0-17 (cut off high frets near sound hole)
+  const startFret = 0;
   const stringSpacing = width / 7; // Space for 6 strings with margins
+
+  // Calculate physics-based fret positions (exponentially decreasing spacing)
+  const fretYPositions = calculateFretYPositions(startFret, numFrets, height);
 
   // All 6 guitar strings (6th to 1st)
   const allStringNames = ['E', 'A', 'D', 'G', 'B', 'E'];
@@ -94,38 +91,28 @@ export default function LongFretboardDiagram({
   });
 
   return (
-    <div className="flex flex-col items-center gap-4 p-6 bg-gray-800 rounded-lg border border-gray-700 min-w-fit">
-      {/* Header */}
-      <div className="text-center">
-        <h3 className="text-lg font-semibold text-gray-200">{stringGroupLabel}</h3>
-        <p className="text-sm text-gray-400 mt-1">All {voicings.length} positions on one neck</p>
-      </div>
-
-      {/* String names header - all 6 strings */}
-      <div className="flex justify-around w-full text-sm font-medium" style={{ width: `${width}px` }}>
-        {allStringNames.map((name, idx) => (
-          <span
-            key={idx}
-            className={`w-8 text-center ${
-              activeStringIndices.has(idx) ? 'text-blue-400 font-bold' : 'text-gray-600'
-            }`}
-          >
-            {name}
-          </span>
-        ))}
-      </div>
-
+    <div className="flex flex-col items-center gap-4 p-6 rounded-lg border min-w-fit" style={{ backgroundColor: '#d4a574', borderColor: '#b8935f' }}>
       {/* SVG Long Fretboard */}
       <div className="relative">
         <svg
           width={width}
           height={height}
-          className="bg-gray-900 rounded-lg"
+          className="rounded-lg"
           viewBox={`0 0 ${width} ${height}`}
         >
+          {/* Fretboard wood - slightly narrower than frets */}
+          <rect
+            x={allStringXPositions[0] - 15}
+            y={0}
+            width={allStringXPositions[5] - allStringXPositions[0] + 30}
+            height={height}
+            fill="#3d2817"
+            rx={8}
+          />
+
           {/* Fret lines */}
           {Array.from({ length: numFrets + 1 }).map((_, fretIdx) => {
-            const y = fretHeight * (fretIdx + 1);
+            const y = fretYPositions[fretIdx];
             const isNut = fretIdx === 0;
 
             return (
@@ -136,48 +123,41 @@ export default function LongFretboardDiagram({
                   y1={y}
                   x2={allStringXPositions[5] + 20}
                   y2={y}
-                  stroke={isNut ? '#9ca3af' : '#4b5563'}
-                  strokeWidth={isNut ? 4 : 1.5}
+                  stroke={isNut ? '#e8dcc8' : '#b8b8b8'}
+                  strokeWidth={isNut ? 4 : 2}
                 />
-                {/* Fret number */}
-                {fretIdx % 2 === 0 && (
-                  <text
-                    x={allStringXPositions[0] - 35}
-                    y={y - fretHeight / 2}
-                    fill="#6b7280"
-                    fontSize="14"
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                  >
-                    {fretIdx}
-                  </text>
-                )}
-                {/* Fret markers (3, 5, 7, 9, 12, 15, 17, 19) */}
-                {[3, 5, 7, 9, 15, 17, 19].includes(fretIdx) && (
+                {/* Fret markers (3, 5, 7, 9, 12, 15, 17) - pearl inlays */}
+                {[3, 5, 7, 9, 15, 17].includes(fretIdx) && fretIdx < numFrets && (
                   <circle
                     cx={width / 2}
-                    cy={y - fretHeight / 2}
-                    r={6}
-                    fill="#374151"
-                    opacity={0.5}
+                    cy={(y + fretYPositions[fretIdx + 1]) / 2}
+                    r={10}
+                    fill="#f5f5dc"
+                    opacity={0.95}
+                    stroke="#ffffff"
+                    strokeWidth={1}
                   />
                 )}
-                {/* Double dots at 12th fret */}
+                {/* Double dots at 12th fret - pearl inlays */}
                 {fretIdx === 12 && (
                   <>
                     <circle
                       cx={(allStringXPositions[1] + allStringXPositions[2]) / 2}
-                      cy={y - fretHeight / 2}
-                      r={6}
-                      fill="#374151"
-                      opacity={0.5}
+                      cy={(y + fretYPositions[fretIdx + 1]) / 2}
+                      r={10}
+                      fill="#f5f5dc"
+                      opacity={0.95}
+                      stroke="#ffffff"
+                      strokeWidth={1}
                     />
                     <circle
                       cx={(allStringXPositions[3] + allStringXPositions[4]) / 2}
-                      cy={y - fretHeight / 2}
-                      r={6}
-                      fill="#374151"
-                      opacity={0.5}
+                      cy={(y + fretYPositions[fretIdx + 1]) / 2}
+                      r={10}
+                      fill="#f5f5dc"
+                      opacity={0.95}
+                      stroke="#ffffff"
+                      strokeWidth={1}
                     />
                   </>
                 )}
@@ -185,29 +165,85 @@ export default function LongFretboardDiagram({
             );
           })}
 
-          {/* String lines - all 6 strings */}
+          {/* String lines - all 6 strings with varying thickness and realistic colors */}
           {allStringXPositions.map((x, stringIdx) => {
             const isActive = activeStringIndices.has(stringIdx);
+            const thickness = getStringThickness(stringIdx, isActive ? 1.8 : 1.2);
+
+            // Realistic string colors:
+            // Strings 0-3 (6th-E, 5th-A, 4th-D, 3rd-G): Bronze/brass wound strings
+            // Strings 4-5 (2nd-B, 1st-E): Silver/steel plain strings
+            const isBrassWound = stringIdx <= 3;
+            const brassColor = '#cd7f32'; // Bronze color
+            const silverColor = '#c0c0c0'; // Silver/steel color
+            const stringColor = isBrassWound ? brassColor : silverColor;
+
             return (
               <line
                 key={`string-${stringIdx}`}
                 x1={x}
-                y1={fretHeight}
+                y1={fretYPositions[0]}
                 x2={x}
-                y2={height - fretHeight / 2}
-                stroke={isActive ? '#9ca3af' : '#4b5563'}
-                strokeWidth={isActive ? '2.5' : '1.5'}
-                opacity={isActive ? 1 : 0.3}
+                y2={fretYPositions[numFrets]}
+                stroke={stringColor}
+                strokeWidth={thickness}
+                opacity={1}
               />
             );
           })}
 
-          {/* Voicing dots - only on active strings */}
+          {/* Chromatic background - all notes on ALL 6 strings (faint) */}
+          <g opacity={0.3}>
+            {allStringXPositions.map((x, globalStringIdx) => {
+              return Array.from({ length: numFrets + 1 }).map((_, fretIdx) => {
+                const y = getNoteYPosition(fretIdx, fretYPositions, startFret);
+                const { noteName } = getNoteAtPosition(globalStringIdx, fretIdx);
+                const noteColor = getNoteColor(noteName);
+
+                return (
+                  <g key={`chromatic-${globalStringIdx}-${fretIdx}`}>
+                    {/* Chromatic note dot */}
+                    <circle
+                      cx={x}
+                      cy={y}
+                      r={8}
+                      fill={noteColor.bg}
+                    />
+                    {/* Note name text */}
+                    <text
+                      x={x}
+                      y={y}
+                      fill={noteColor.text}
+                      fontSize="9"
+                      fontWeight="bold"
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      pointerEvents="none"
+                    >
+                      {noteName}
+                    </text>
+                  </g>
+                );
+              });
+            })}
+          </g>
+
+          {/* Voicing dots - triad notes on active strings */}
           {voicings.map((voicing, voicingIdx) => {
             const positionColor = POSITION_COLORS[voicing.position];
-            const isHighlighted =
-              highlightedPosition === null || highlightedPosition === voicing.position;
-            const opacity = isHighlighted ? 1 : 0.2;
+
+            // Opacity logic:
+            // - If no hover: all triad notes at 70%
+            // - If hovering near: hovered position at 100%, other positions at 70%
+            // - Background chromatic notes stay at 30% (set above)
+            let opacity = 0.7; // Default for non-hovered triad positions
+            if (hoveredNearPosition === null && highlightedPosition === null) {
+              opacity = 0.7; // No hover - all triad positions visible at 70%
+            } else if (hoveredNearPosition === voicing.position || highlightedPosition === voicing.position) {
+              opacity = 1.0; // Hovered position - full brightness
+            } else {
+              opacity = 0.7; // Other positions - still visible but dimmer
+            }
 
             return (
               <g key={`voicing-${voicingIdx}`} opacity={opacity}>
@@ -215,19 +251,18 @@ export default function LongFretboardDiagram({
                   // Map local string index (0-2) to global string index (0-5)
                   const globalStringIdx = stringGroupIndices[localStringIdx];
                   const x = allStringXPositions[globalStringIdx];
-                  const y =
-                    fret === 0
-                      ? fretHeight / 2
-                      : fretHeight + fret * fretHeight - fretHeight / 2;
+                  const y = getNoteYPosition(fret, fretYPositions, startFret);
 
                   const notePc = voicing.notes[localStringIdx];
                   const intervalName = getIntervalName(notePc, triadPcs);
-                  const noteColor = NOTE_ROLE_COLORS[intervalName];
                   const noteName = voicing.noteNames[localStringIdx];
+                  const noteColor = getNoteColor(noteName);
+                  const isRoot = intervalName === 'root';
 
-                  const isHovered =
+                  const isDirectHover =
                     hoveredDot?.voicingIdx === voicingIdx &&
                     hoveredDot?.stringIdx === localStringIdx;
+                  const isPositionHovered = hoveredNearPosition === voicing.position;
 
                   // Check if multiple dots at same position
                   const key = `${fret}-${localStringIdx}`;
@@ -237,63 +272,84 @@ export default function LongFretboardDiagram({
                   );
                   const offsetX = dotsAtPosition.length > 1 ? (dotIndex - 0.5) * 8 : 0;
 
+                  // Size logic:
+                  // - Direct hover: 18px
+                  // - Position hover (near): 17px
+                  // - Normal: 16px
+                  let radius = 16;
+                  if (isDirectHover) {
+                    radius = 18;
+                  } else if (isPositionHovered) {
+                    radius = 17;
+                  }
+
                   return (
                     <g
                       key={`dot-${voicingIdx}-${localStringIdx}`}
-                      onMouseEnter={() => {
-                        setHoveredDot({ voicingIdx, stringIdx: localStringIdx });
-                        setHighlightedPosition(voicing.position);
-                      }}
-                      onMouseLeave={() => {
-                        setHoveredDot(null);
-                        setHighlightedPosition(null);
-                      }}
                       style={{ cursor: 'pointer' }}
                       transform={`translate(${offsetX}, 0)`}
                     >
-                      {/* Position ring (outer) */}
+                      {/* Expanded hover detection area (3x radius) */}
                       <circle
                         cx={x}
                         cy={y}
-                        r={isHovered ? 24 : 20}
-                        fill="none"
-                        stroke={positionColor.border}
-                        strokeWidth={isHovered ? 3 : 2}
-                        opacity={0.8}
+                        r={48}
+                        fill="transparent"
+                        onMouseEnter={() => {
+                          setHoveredNearPosition(voicing.position);
+                        }}
+                        onMouseLeave={() => {
+                          setHoveredNearPosition(null);
+                        }}
                       />
-                      {/* Note color dot (inner) */}
+                      {/* Direct hover detection area */}
                       <circle
                         cx={x}
                         cy={y}
-                        r={isHovered ? 16 : 14}
+                        r={18}
+                        fill="transparent"
+                        onMouseEnter={() => {
+                          setHoveredDot({ voicingIdx, stringIdx: localStringIdx });
+                          setHighlightedPosition(voicing.position);
+                        }}
+                        onMouseLeave={() => {
+                          setHoveredDot(null);
+                          setHighlightedPosition(null);
+                        }}
+                      />
+                      {/* Root note gold ring */}
+                      {isRoot && (
+                        <circle
+                          cx={x}
+                          cy={y}
+                          r={radius + 3}
+                          fill="none"
+                          stroke="#ffd700"
+                          strokeWidth={2}
+                        />
+                      )}
+                      {/* Note color dot */}
+                      <circle
+                        cx={x}
+                        cy={y}
+                        r={radius}
                         fill={noteColor.bg}
-                        stroke={isHovered ? '#fbbf24' : 'none'}
-                        strokeWidth={isHovered ? 2 : 0}
+                        stroke={isDirectHover ? '#fbbf24' : 'none'}
+                        strokeWidth={isDirectHover ? 3 : 0}
+                        pointerEvents="none"
                       />
                       {/* Note name text */}
                       <text
                         x={x}
                         y={y}
                         fill={noteColor.text}
-                        fontSize={isHovered ? '13' : '12'}
-                        fontWeight="bold"
+                        fontSize={isDirectHover ? '14' : '12'}
+                        fontWeight={isRoot ? 'bold' : 'bold'}
                         textAnchor="middle"
                         dominantBaseline="middle"
                         pointerEvents="none"
                       >
                         {noteName}
-                      </text>
-                      {/* Position label */}
-                      <text
-                        x={x}
-                        y={y + (isHovered ? 38 : 34)}
-                        fill={positionColor.bg}
-                        fontSize="10"
-                        fontWeight="bold"
-                        textAnchor="middle"
-                        pointerEvents="none"
-                      >
-                        P{voicing.position}
                       </text>
                     </g>
                   );
@@ -305,74 +361,23 @@ export default function LongFretboardDiagram({
 
         {/* Hover info overlay */}
         {hoveredDot !== null && (
-          <div className="absolute top-4 left-4 bg-gray-900/95 border border-gray-700 rounded-lg p-3 shadow-xl">
+          <div className="absolute top-4 left-4 rounded-lg p-3 shadow-xl border" style={{ backgroundColor: '#f5f1e8', borderColor: '#d4a574' }}>
             <div className="text-sm space-y-1">
-              <div className="font-semibold text-yellow-400">
-                {POSITION_COLORS[voicings[hoveredDot.voicingIdx].position].label}
-              </div>
-              <div className="text-gray-300">
+              <div style={{ color: '#3d2817' }}>
                 Note: {voicings[hoveredDot.voicingIdx].noteNames[hoveredDot.stringIdx]}
               </div>
-              <div className="text-gray-400 text-xs">
+              <div className="text-xs" style={{ color: '#5a4433' }}>
                 Interval: {getIntervalName(voicings[hoveredDot.voicingIdx].notes[hoveredDot.stringIdx], triadPcs)}
               </div>
-              <div className="text-gray-400 text-xs">
+              <div className="text-xs" style={{ color: '#5a4433' }}>
                 Inversion: {voicings[hoveredDot.voicingIdx].inversion}
               </div>
-              <div className="text-gray-500 text-xs">
+              <div className="text-xs" style={{ color: '#6b5d50' }}>
                 Frets: {voicings[hoveredDot.voicingIdx].frets.join('-')}
               </div>
             </div>
           </div>
         )}
-      </div>
-
-      {/* Position legend */}
-      <div className="flex flex-wrap justify-center gap-3 mt-2">
-        {POSITION_COLORS.map((color, idx) => (
-          <button
-            key={idx}
-            onClick={() =>
-              setHighlightedPosition(highlightedPosition === idx ? null : idx)
-            }
-            onMouseEnter={() => setHighlightedPosition(idx)}
-            onMouseLeave={() => setHighlightedPosition(null)}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-md border-2 transition-all ${
-              highlightedPosition === idx || highlightedPosition === null
-                ? 'opacity-100 scale-105'
-                : 'opacity-40 scale-100'
-            }`}
-            style={{
-              borderColor: color.border,
-              backgroundColor: `${color.bg}20`,
-            }}
-          >
-            <div
-              className="w-4 h-4 rounded-full border-2"
-              style={{
-                backgroundColor: color.bg,
-                borderColor: color.border,
-              }}
-            />
-            <span className="text-xs font-medium text-gray-300">{color.label}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* Note role legend */}
-      <div className="flex gap-4 text-xs mt-2 pt-3 border-t border-gray-700">
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-full bg-red-500" />
-          <span className="text-gray-400">Root</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-full bg-yellow-500" />
-          <span className="text-gray-400">3rd</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-full bg-blue-500" />
-          <span className="text-gray-400">5th</span>
-        </div>
       </div>
     </div>
   );
