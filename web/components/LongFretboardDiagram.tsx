@@ -391,26 +391,6 @@ export default function LongFretboardDiagram({
           })}
         </svg>
         </div>
-
-        {/* Hover info overlay */}
-        {hoveredDot !== null && (
-          <div className="absolute top-4 left-4 rounded-lg p-3 shadow-xl border" style={{ backgroundColor: '#f5f1e8', borderColor: '#d4a574' }}>
-            <div className="text-sm space-y-1">
-              <div style={{ color: '#3d2817' }}>
-                Note: {voicings[hoveredDot.voicingIdx].noteNames[hoveredDot.stringIdx]}
-              </div>
-              <div className="text-xs" style={{ color: '#5a4433' }}>
-                Interval: {getIntervalName(voicings[hoveredDot.voicingIdx].notes[hoveredDot.stringIdx], triadPcs)}
-              </div>
-              <div className="text-xs" style={{ color: '#5a4433' }}>
-                Inversion: {voicings[hoveredDot.voicingIdx].inversion}
-              </div>
-              <div className="text-xs" style={{ color: '#6b5d50' }}>
-                Frets: {voicings[hoveredDot.voicingIdx].frets.join('-')}
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
