@@ -4,7 +4,25 @@
 
 Interactive guitar practice app with realistic fretboard visualization, circle of fifths color coding, and physics-based rendering.
 
-## Quick Start
+## Installation
+
+**First time setup:**
+
+```bash
+# 1. Install Python dependencies (choose one):
+poetry install              # if you have poetry
+# OR
+python -m venv .venv && .venv/bin/pip install -e .
+
+# 2. Install web dependencies:
+cd web
+npm install
+cd ..
+```
+
+## Running the App
+
+### Web App (Full UI)
 
 **Terminal 1** - Start API server:
 ```bash
@@ -14,7 +32,7 @@ Interactive guitar practice app with realistic fretboard visualization, circle o
 **Terminal 2** - Start web UI:
 ```bash
 cd web
-npm run dev                 # localhost:3000
+npm run dev                 # Open http://localhost:3000
 ```
 
 ## Console App

@@ -354,21 +354,22 @@ export default function LongFretboardDiagram({
 
           {/* Inversion symbols below fretboard as SVG text */}
           {voicings.map((voicing, voicingIdx) => {
-            // Get X position of first note in this voicing
-            const firstFret = voicing.frets[0];
-            const firstX = getNoteYPosition(firstFret, fretXPositions, startFret);
+            // Get X position of LEFTMOST note (lowest fret) in this voicing
+            const minFret = Math.min(...voicing.frets);
+            const leftmostX = getNoteYPosition(minFret, fretXPositions, startFret);
 
             // Map inversion to music theory symbol
-            const inversionSymbol = voicing.inversion === 'root' ? '' :
-                                   voicing.inversion === 'first' ? '⁶' :
-                                   '⁶₄';
-
-            if (!inversionSymbol) return null;
+            // Root position: △ (triangle/delta)
+            // First inversion: ¹ (superscript 1)
+            // Second inversion: ² (superscript 2)
+            const inversionSymbol = voicing.inversion === 'root' ? '△' :
+                                   voicing.inversion === 'first' ? '¹' :
+                                   '²';
 
             return (
               <text
                 key={`inversion-${voicingIdx}`}
-                x={firstX}
+                x={leftmostX}
                 y={height - 10}
                 fill="#4a3020"
                 fontSize="24"
