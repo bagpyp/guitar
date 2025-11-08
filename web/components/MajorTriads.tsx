@@ -21,10 +21,10 @@ const KEY_TO_NOTE_MAP: Record<string, string> = {
 };
 
 const STRING_GROUP_LABELS = [
-  'Strings 6-5-4 (E-A-D)',
-  'Strings 5-4-3 (A-D-G)',
-  'Strings 4-3-2 (D-G-B)',
   'Strings 3-2-1 (G-B-E)',
+  'Strings 4-3-2 (D-G-B)',
+  'Strings 5-4-3 (A-D-G)',
+  'Strings 6-5-4 (E-A-D)',
 ];
 
 export default function MajorTriads() {
@@ -126,11 +126,11 @@ export default function MajorTriads() {
         </div>
       )}
 
-      {/* Triads display */}
+      {/* Triads display - stacked vertically */}
       {triadsData && !loading && (
-        <div className="w-full overflow-x-auto py-6">
-          <div className="flex gap-16" style={{ flexDirection: 'row', flexWrap: 'nowrap', display: 'flex' }}>
-            {triadsData.stringGroups.map((group, groupIdx) => {
+        <div className="w-full py-6">
+          <div className="flex flex-col gap-16">
+            {[...triadsData.stringGroups].reverse().map((group, groupIdx) => {
               // Convert triad note names to pitch classes
               const triadPcs: [number, number, number] = [
                 nameToPc(triadsData.triadNotes[0] as any),
@@ -138,12 +138,15 @@ export default function MajorTriads() {
                 nameToPc(triadsData.triadNotes[2] as any),
               ];
 
+              // Reversed index for labels (0→3, 1→2, 2→1, 3→0)
+              const labelIdx = 3 - groupIdx;
+
               return (
                 <div key={groupIdx} className="flex-shrink-0">
                   <LongFretboardDiagram
                     voicings={group.voicings}
                     stringNames={group.stringNames}
-                    stringGroupLabel={STRING_GROUP_LABELS[groupIdx]}
+                    stringGroupLabel={STRING_GROUP_LABELS[labelIdx]}
                     triadPcs={triadPcs}
                   />
                 </div>

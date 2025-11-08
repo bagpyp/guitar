@@ -52,21 +52,21 @@ export default function LongFretboardDiagram({
   // Get the string group indices (e.g., [3, 4, 5] for strings 3-2-1)
   const stringGroupIndices = voicings.length > 0 ? voicings[0].strings : [3, 4, 5];
 
-  // SVG dimensions for long neck - wider to show all 6 strings
-  const width = 450;
-  const height = 1000;
+  // SVG dimensions - rotated 90 degrees (now horizontal)
+  const width = 1000; // Now the long dimension (frets span left-right)
+  const height = 450; // Now the short dimension (strings span top-bottom)
   const numFrets = 18; // Show frets 0-17 (cut off high frets near sound hole)
   const startFret = 0;
-  const stringSpacing = width / 7; // Space for 6 strings with margins
+  const stringSpacing = height / 7; // Space for 6 strings with margins
 
-  // Calculate physics-based fret positions (exponentially decreasing spacing)
-  const fretYPositions = calculateFretYPositions(startFret, numFrets, height);
+  // Calculate physics-based fret positions (now horizontal X positions)
+  const fretXPositions = calculateFretYPositions(startFret, numFrets, width);
 
   // All 6 guitar strings (6th to 1st)
   const allStringNames = ['E', 'A', 'D', 'G', 'B', 'E'];
 
-  // Calculate string X positions for all 6 strings
-  const allStringXPositions = [
+  // Calculate string Y positions for all 6 strings (now vertical)
+  const allStringYPositions = [
     stringSpacing * 1,
     stringSpacing * 2,
     stringSpacing * 3,
@@ -102,35 +102,35 @@ export default function LongFretboardDiagram({
         >
           {/* Fretboard wood - slightly narrower than frets */}
           <rect
-            x={allStringXPositions[0] - 15}
-            y={0}
-            width={allStringXPositions[5] - allStringXPositions[0] + 30}
-            height={height}
+            x={0}
+            y={allStringYPositions[0] - 15}
+            width={width}
+            height={allStringYPositions[5] - allStringYPositions[0] + 30}
             fill="#3d2817"
             rx={8}
           />
 
-          {/* Fret lines */}
+          {/* Fret lines - now vertical */}
           {Array.from({ length: numFrets + 1 }).map((_, fretIdx) => {
-            const y = fretYPositions[fretIdx];
+            const x = fretXPositions[fretIdx];
             const isNut = fretIdx === 0;
 
             return (
               <g key={`fret-${fretIdx}`}>
-                {/* Fret line - spans all 6 strings */}
+                {/* Fret line - spans all 6 strings vertically */}
                 <line
-                  x1={allStringXPositions[0] - 20}
-                  y1={y}
-                  x2={allStringXPositions[5] + 20}
-                  y2={y}
+                  x1={x}
+                  y1={allStringYPositions[0] - 20}
+                  x2={x}
+                  y2={allStringYPositions[5] + 20}
                   stroke={isNut ? '#e8dcc8' : '#b8b8b8'}
                   strokeWidth={isNut ? 4 : 2}
                 />
                 {/* Fret markers (3, 5, 7, 9, 12, 15, 17) - pearl inlays */}
                 {[3, 5, 7, 9, 15, 17].includes(fretIdx) && fretIdx < numFrets && (
                   <circle
-                    cx={width / 2}
-                    cy={(y + fretYPositions[fretIdx + 1]) / 2}
+                    cx={(x + fretXPositions[fretIdx + 1]) / 2}
+                    cy={height / 2}
                     r={10}
                     fill="#f5f5dc"
                     opacity={0.95}
@@ -142,8 +142,8 @@ export default function LongFretboardDiagram({
                 {fretIdx === 12 && (
                   <>
                     <circle
-                      cx={(allStringXPositions[1] + allStringXPositions[2]) / 2}
-                      cy={(y + fretYPositions[fretIdx + 1]) / 2}
+                      cx={(x + fretXPositions[fretIdx + 1]) / 2}
+                      cy={(allStringYPositions[1] + allStringYPositions[2]) / 2}
                       r={10}
                       fill="#f5f5dc"
                       opacity={0.95}
@@ -151,8 +151,8 @@ export default function LongFretboardDiagram({
                       strokeWidth={1}
                     />
                     <circle
-                      cx={(allStringXPositions[3] + allStringXPositions[4]) / 2}
-                      cy={(y + fretYPositions[fretIdx + 1]) / 2}
+                      cx={(x + fretXPositions[fretIdx + 1]) / 2}
+                      cy={(allStringYPositions[3] + allStringYPositions[4]) / 2}
                       r={10}
                       fill="#f5f5dc"
                       opacity={0.95}
@@ -165,8 +165,8 @@ export default function LongFretboardDiagram({
             );
           })}
 
-          {/* String lines - all 6 strings with varying thickness and realistic colors */}
-          {allStringXPositions.map((x, stringIdx) => {
+          {/* String lines - all 6 strings horizontal with varying thickness and realistic colors */}
+          {allStringYPositions.map((y, stringIdx) => {
             const isActive = activeStringIndices.has(stringIdx);
             const thickness = getStringThickness(stringIdx, isActive ? 1.8 : 1.2);
 
@@ -181,10 +181,10 @@ export default function LongFretboardDiagram({
             return (
               <line
                 key={`string-${stringIdx}`}
-                x1={x}
-                y1={fretYPositions[0]}
-                x2={x}
-                y2={fretYPositions[numFrets]}
+                x1={fretXPositions[0]}
+                y1={y}
+                x2={fretXPositions[numFrets]}
+                y2={y}
                 stroke={stringColor}
                 strokeWidth={thickness}
                 opacity={1}
@@ -194,9 +194,9 @@ export default function LongFretboardDiagram({
 
           {/* Chromatic background - all notes on ALL 6 strings (faint) */}
           <g opacity={0.3}>
-            {allStringXPositions.map((x, globalStringIdx) => {
+            {allStringYPositions.map((y, globalStringIdx) => {
               return Array.from({ length: numFrets + 1 }).map((_, fretIdx) => {
-                const y = getNoteYPosition(fretIdx, fretYPositions, startFret);
+                const x = getNoteYPosition(fretIdx, fretXPositions, startFret);
                 const { noteName } = getNoteAtPosition(globalStringIdx, fretIdx);
                 const noteColor = getNoteColor(noteName);
 
@@ -250,8 +250,8 @@ export default function LongFretboardDiagram({
                 {voicing.frets.map((fret, localStringIdx) => {
                   // Map local string index (0-2) to global string index (0-5)
                   const globalStringIdx = stringGroupIndices[localStringIdx];
-                  const x = allStringXPositions[globalStringIdx];
-                  const y = getNoteYPosition(fret, fretYPositions, startFret);
+                  const y = allStringYPositions[globalStringIdx];
+                  const x = getNoteYPosition(fret, fretXPositions, startFret);
 
                   const notePc = voicing.notes[localStringIdx];
                   const intervalName = getIntervalName(notePc, triadPcs);
