@@ -66,13 +66,14 @@ export default function LongFretboardDiagram({
   const allStringNames = ['E', 'A', 'D', 'G', 'B', 'E'];
 
   // Calculate string Y positions for all 6 strings (now vertical)
+  // Reversed: string 1 (index 5) at top, string 6 (index 0) at bottom
   const allStringYPositions = [
-    stringSpacing * 1,
-    stringSpacing * 2,
-    stringSpacing * 3,
-    stringSpacing * 4,
-    stringSpacing * 5,
-    stringSpacing * 6,
+    stringSpacing * 6, // String 6 (index 0) - bottom (thickest)
+    stringSpacing * 5, // String 5 (index 1)
+    stringSpacing * 4, // String 4 (index 2)
+    stringSpacing * 3, // String 3 (index 3)
+    stringSpacing * 2, // String 2 (index 4)
+    stringSpacing * 1, // String 1 (index 5) - top (thinnest)
   ];
 
   // Determine which strings are active (part of this group)
