@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { TriadVoicing } from '../lib/guitar/triads';
 import { calculateFretYPositions, getNoteYPosition, getStringThickness, getNoteAtPosition } from '../lib/guitar/fretboard-physics';
 import { getNoteColor, getAllNoteColorsInCircleOfFifths } from '../lib/guitar/note-colors';
+import { playNote, playChord, stopAllSounds, resumeAudioContext } from '../lib/guitar/sound';
 
 interface LongFretboardDiagramProps {
   voicings: TriadVoicing[]; // All 4 positions for this string group
@@ -48,6 +49,58 @@ export default function LongFretboardDiagram({
   } | null>(null);
   const [hoveredNearPosition, setHoveredNearPosition] = useState<number | null>(null);
   const [highlightedPosition, setHighlightedPosition] = useState<number | null>(null);
+
+  // Resume audio context on first interaction
+  useEffect(() => {
+    const handleFirstInteraction = () => {
+      resumeAudioContext();
+      document.removeEventListener('click', handleFirstInteraction);
+      document.removeEventListener('keydown', handleFirstInteraction);
+    };
+
+    document.addEventListener('click', handleFirstInteraction);
+    document.addEventListener('keydown', handleFirstInteraction);
+
+    return () => {
+      document.removeEventListener('click', handleFirstInteraction);
+      document.removeEventListener('keydown', handleFirstInteraction);
+      stopAllSounds();
+    };
+  }, []);
+
+  // Play sound when hovering over a specific note
+  useEffect(() => {
+    if (hoveredDot !== null) {
+      const voicing = voicings[hoveredDot.voicingIdx];
+      const globalStringIdx = stringGroupIndices[hoveredDot.stringIdx];
+      const fret = voicing.frets[hoveredDot.stringIdx];
+
+      playNote(globalStringIdx, fret, 2.0);
+    } else {
+      stopAllSounds();
+    }
+  }, [hoveredDot, voicings, stringGroupIndices]);
+
+  // Play chord when hovering near a position (but not on a specific note)
+  useEffect(() => {
+    if (hoveredNearPosition !== null && hoveredDot === null) {
+      // Find all voicings in this position
+      const positionVoicings = voicings.filter(v => v.position === hoveredNearPosition);
+
+      if (positionVoicings.length > 0) {
+        // Play the first voicing as a chord (they should all be the same position)
+        const voicing = positionVoicings[0];
+        const chordNotes = voicing.frets.map((fret, localIdx) => ({
+          stringIndex: stringGroupIndices[localIdx],
+          fret,
+        }));
+
+        playChord(chordNotes, 2.0);
+      }
+    } else if (hoveredNearPosition === null && hoveredDot === null) {
+      stopAllSounds();
+    }
+  }, [hoveredNearPosition, hoveredDot, voicings, stringGroupIndices]);
 
   // Get the string group indices (e.g., [3, 4, 5] for strings 3-2-1)
   const stringGroupIndices = voicings.length > 0 ? voicings[0].strings : [3, 4, 5];
