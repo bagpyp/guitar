@@ -1,5 +1,9 @@
 # Guitar Scale Practice
 
+![Guitar Triads Visualization](screenshot.png)
+
+Interactive guitar practice app with realistic fretboard visualization, circle of fifths color coding, and physics-based rendering.
+
 ## Quick Start
 
 **Terminal 1** - Start API server:
