@@ -49,7 +49,7 @@ guitar/
 # From repo root
 .venv/bin/pytest -v
 
-# Expected: 24 tests passing (as of latest commit)
+# Expected: 31 tests passing (as of latest commit)
 ```
 
 ### TypeScript Tests
@@ -239,35 +239,55 @@ poetry run serve    # Run API server
 - `web/components/LongFretboardDiagram.tsx`: Unified vertical fretboard (426 lines)
 - `web/components/FretboardDiagram.tsx`: Compact individual diagrams
 - `web/components/MajorTriads.tsx`: Main UI component with view toggle
-- `test_triads.py`: 10 Python tests
+- `test_triads.py`: 10 Python tests (basic triad logic)
+- `test_position_selection_bug.py`: 2 Python tests (quartile distribution)
+- `test_triad_validation.py`: 7 Python tests (comprehensive validation)
 - `web/__tests__/triads.test.ts`: 21 TypeScript tests
 
 **Important Algorithm: `select_4_positions()`**
 
-⚠️ **CRITICAL**: This function uses a quartile-based approach, NOT fixed ranges!
+⚠️ **CRITICAL**: This function uses a quartile-based approach distributing at 0%, 25%, 50%, 75%!
 
 ```python
 # CORRECT (current implementation):
 indices = [
-    0,                      # Position 0: 0th percentile (lowest)
-    round(n / 4),           # Position 1: 25th percentile
-    round(2 * n / 4),       # Position 2: 50th percentile
-    n - 1                   # Position 3: 100th percentile (highest)
+    0,                          # Position 0: 0% (first/lowest)
+    round((n - 1) / 4),         # Position 1: 25%
+    round(2 * (n - 1) / 4),     # Position 2: 50%
+    round(3 * (n - 1) / 4)      # Position 3: 75%
 ]
 ```
 
-**Why quartiles?** Fixed ranges like `(0, 5.5), (4.5, 9.5), (8.5, 13.5), (11.5, 21)` caused a bug where voicings around fret 8 were skipped because they'd be grabbed by the wrong position bucket. Quartiles ensure even distribution regardless of how many voicings exist.
+**Why (n-1)?** We distribute across the **index range** [0, n-1], not the count [0, n]. This prevents position 3 from always being the absolute highest voicing.
 
-**Bug History (FIXED):** C major on strings 3-2-1 was skipping the fret-8 voicing. Test in `test_position_selection_bug.py` now prevents regression.
+**Example with 5 voicings** at frets [0.3, 4.3, 8.3, 12.3, 16.3]:
+- **Correct**: indices [0, 1, 2, 3] → positions at frets [0.3, 4.3, 8.3, 12.3] ✓
+- **Wrong** (using n-1 for P3): [0, 1, 2, 4] → positions at [0.3, 4.3, 8.3, 16.3] ❌
 
-### Voicing Constraints
+**Bug History:**
+1. Original fixed ranges skipped fret-8 voicings → Fixed with quartiles
+2. Using `n-1` for position 3 pushed it too high (fret 17) → Fixed with `round(3*(n-1)/4)`
+
+Tests: `test_position_selection_bug.py` and `test_triad_validation.py` prevent regressions.
+
+### Voicing Constraints & Validation
 
 - **Max 5-fret stretch**: Voicings with `max(frets) - min(frets) > 5` are filtered out
-- **All 3 triad notes required**: Root, 3rd, and 5th must all be present
+- **All 3 triad notes required**: Root, 3rd, and 5th must all be present (no duplicates, no missing)
+- **Only triad notes allowed**: Every note must be in {root, 3rd, 5th} pitch class set
 - **Inversion detection**: Based on lowest note (low string = low pitch)
   - Root position: lowest note is root
   - 1st inversion: lowest note is 3rd
   - 2nd inversion: lowest note is 5th
+
+**Color Coding (CRITICAL for UI):**
+- **Root = Red** (#ef4444)
+- **3rd = Yellow** (#eab308) - NOT green!
+- **5th = Blue** (#3b82f6)
+
+Colors are based on **interval role** (root/3rd/5th), NOT string position. A note's color depends on which triad degree it is, regardless of which string or inversion.
+
+**Bug Fixed**: Originally, colors were assigned by string index (lowest=red), making all voicings look the same. Now colors correctly identify interval roles.
 
 ## Known Issues & Gotchas
 
@@ -286,6 +306,37 @@ The triad logic MUST match between `main.py` and `web/lib/guitar/triads.ts`. Whe
 
 ### 4. API Endpoint Returns 16 Voicings
 `GET /api/triads/{key}` returns 4 string groups × 4 positions = 16 voicings total. If a string group has fewer than 4 valid voicings, some positions may be missing.
+
+### 5. String Groups Share Strings (This is CORRECT!)
+
+**IMPORTANT**: Adjacent string groups share 2 strings. This means some notes WILL appear in the same location across different fretboards. **This is geometrically correct and expected!**
+
+String group overlaps:
+- **6-5-4** [0,1,2] and **5-4-3** [1,2,3] → Share strings 1 & 2 (A & D)
+- **5-4-3** [1,2,3] and **4-3-2** [2,3,4] → Share strings 2 & 3 (D & G)
+- **4-3-2** [2,3,4] and **3-2-1** [3,4,5] → Share strings 3 & 4 (G & B)
+
+Example: At fret 5, groups 4-3-2 and 3-2-1 both have:
+- String 3 (G) fret 5 = C
+- String 4 (B) fret 5 = E
+
+This is NOT a bug! It's the same physical location on the guitar neck, so different voicings can share notes on their overlapping strings.
+
+**Validation**: Every voicing must contain ONLY the root, 3rd, and 5th of the key (e.g., C major = C, E, G only). See `test_triad_validation.py` for comprehensive checks.
+
+### 6. Long Neck View Shows All 6 Strings
+
+The long neck fretboard diagrams display **all 6 strings** for spatial context:
+- **Active strings** (3 in the group): Bright, thick lines, bold blue names, note dots
+- **Inactive strings** (other 3): Dim, thin lines (30% opacity), gray names, no dots
+
+Visual examples:
+- **Strings 6-5-4** (E-A-D): Active on left, 3 dim strings on right
+- **Strings 5-4-3** (A-D-G): 1 dim on left, 3 active in middle, 2 dim on right
+- **Strings 4-3-2** (D-G-B): 2 dim on left, 3 active in middle, 1 dim on right
+- **Strings 3-2-1** (G-B-E): 3 dim strings on left, active on right
+
+This helps identify which part of the neck you're viewing at a glance.
 
 ## Remember
 

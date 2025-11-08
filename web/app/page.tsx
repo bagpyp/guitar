@@ -6,7 +6,7 @@ import ScalePractice from '@/components/ScalePractice';
 import MajorTriads from '@/components/MajorTriads';
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState('scale-practice');
+  const [activeTab, setActiveTab] = useState('triads');
 
   return (
     <main className="min-h-screen py-8">
@@ -17,11 +17,11 @@ export default function Home() {
         </header>
 
         <Tabs activeTab={activeTab} onTabChange={setActiveTab}>
-          <Tab id="scale-practice" label="Scale Practice">
-            <ScalePractice />
-          </Tab>
           <Tab id="triads" label="Major Triads">
             <MajorTriads />
+          </Tab>
+          <Tab id="scale-practice" label="Scale Practice">
+            <ScalePractice />
           </Tab>
         </Tabs>
       </div>
