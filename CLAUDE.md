@@ -34,12 +34,13 @@ guitar/
 **Web UI Features:**
 1. **Scale Practice Tab** - Original feature for practicing modes/scales
 2. **Major Triads Tab** - Interactive triad visualization with:
-   - Long Neck View (default): All positions on one unified fretboard per string group
-   - Compact View: Individual diagrams for each position
-   - 4 string groups: 6-5-4, 5-4-3, 4-3-2, 3-2-1
-   - 4 positions per group (0-3) distributed across fretboard
-   - Color coding: Root=Red, 3rd=Green, 5th=Blue
-   - Position rings: P0=Purple, P1=Blue, P2=Green, P3=Amber
+   - **Horizontal fretboard layout**: Frets span left→right (nut to fret 17)
+   - **4 string groups stacked vertically**: 3-2-1 (top) to 6-5-4 (bottom)
+   - **4 positions per group** (0-3) with coordinated selection
+   - **Circle of fifths colors**: Each of 12 chromatic notes has unique color
+   - **Interactive sound**: Hover to play notes/chords with Web Audio API
+   - **Realistic rendering**: Physics-based fret spacing, brass/silver strings
+   - **Inversion symbols**: △ (root), ¹ (1st), ² (2nd) below fretboard
 
 ## Running Tests
 
@@ -59,7 +60,7 @@ guitar/
 cd web
 npm test
 
-# Expected: 36 tests passing (as of latest commit)
+# Expected: 191 tests passing (as of latest commit)
 ```
 
 ### Full Test Suite
@@ -233,42 +234,77 @@ poetry run serve    # Run API server
 - Two view modes: Long Neck (unified fretboard) and Compact (separate diagrams)
 
 **Key Files:**
-- `main.py`: Triad generation logic (`build_major_triad`, `find_all_triad_voicings`, `select_4_positions`)
-- `api.py`: `GET /api/triads/{key}` endpoint
+
+*Backend (Python):*
+- `main.py`: Core triad logic with coordinated position selection
+  - `build_major_triad()`: Generate [root, 3rd, 5th] pitch classes
+  - `find_all_triad_voicings()`: Find all valid voicings on 3 strings
+  - `find_voicing_chains()`: Find sequences that share notes across groups
+  - `select_4_positions_coordinated()`: Select positions with inversion constraints
+  - `voicings_share_notes()`: Check if adjacent groups share notes
+- `api.py`: `GET /api/triads/{key}` endpoint (uses coordinated algorithm)
+
+*Frontend (TypeScript):*
 - `web/lib/guitar/triads.ts`: TypeScript triad logic (mirrors Python)
-- `web/components/LongFretboardDiagram.tsx`: Unified vertical fretboard (426 lines)
-- `web/components/FretboardDiagram.tsx`: Compact individual diagrams
-- `web/components/MajorTriads.tsx`: Main UI component with view toggle
-- `test_triads.py`: 10 Python tests (basic triad logic)
-- `test_position_selection_bug.py`: 2 Python tests (quartile distribution)
-- `test_triad_validation.py`: 7 Python tests (comprehensive validation)
-- `web/__tests__/triads.test.ts`: 21 TypeScript tests
+- `web/lib/guitar/fretboard-physics.ts`: Physics calculations
+  - `calculateFretYPositions()`: Exponentially decreasing fret spacing
+  - `getStringThickness()`: Realistic string gauges
+  - `getNoteAtPosition()`: Calculate note at any string/fret
+- `web/lib/guitar/note-colors.ts`: Circle of fifths color mapping
+- `web/lib/guitar/sound.ts`: Web Audio API sound generation
+  - `calculateNoteFrequency()`: Physics-based Hz calculations
+  - `playNote()`, `playChord()`: Sound playback with ADSR envelope
+- `web/components/LongFretboardDiagram.tsx`: Horizontal fretboard (400+ lines)
+- `web/components/MajorTriads.tsx`: Main UI with circle of fifths key selector
 
-**Important Algorithm: `select_4_positions()`**
+*Tests (222 total):*
+- Python: 31 tests
+- TypeScript: 191 tests across 8 files
+  - `triads.test.ts`: 21 tests (triad generation)
+  - `fretboard-physics.test.ts`: 20 tests (physics calculations)
+  - `note-colors.test.ts`: 29 tests (circle of fifths colors)
+  - `fretboard-rendering.test.ts`: 46 tests (visual features)
+  - `position-note-sharing.test.ts`: 15 tests (coordinated selection)
+  - `hover-interaction.test.ts`: 21 tests (hover/click behavior)
+  - `sound.test.ts`: 24 tests (frequency accuracy)
+  - `guitar-logic.test.ts`: 15 tests (original features)
 
-⚠️ **CRITICAL**: This function uses a quartile-based approach distributing at 0%, 25%, 50%, 75%!
+**Critical Algorithm: Coordinated Position Selection**
 
+⚠️ **IMPORTANT**: Position selection now uses a **coordinated chain-finding approach** across all 4 string groups simultaneously!
+
+**Why Coordination is Needed:**
+- Adjacent string groups share 2 strings (e.g., 6-5-4 shares A&D with 5-4-3)
+- Same position number across groups should share notes on overlapping strings
+- Creates visually coherent patterns across the entire fretboard
+
+**How it Works:**
+1. **Find chains**: Sequences of voicings [v0, v1, v2, v3] that share notes across all 4 groups
+2. **Group by inversion**: Organize chains by their inversion type
+3. **Apply constraints**:
+   - Position 0: Always use absolute LOWEST chain (includes open positions)
+   - Position 3: Highest chain with SAME inversion as P0
+   - Positions 1 & 2: Use the other two inversion types
+4. **Result**: All adjacent groups share notes + inversion symmetry (P0 = P3)
+
+**Example Chain (C major):**
 ```python
-# CORRECT (current implementation):
-indices = [
-    0,                          # Position 0: 0% (first/lowest)
-    round((n - 1) / 4),         # Position 1: 25%
-    round(2 * (n - 1) / 4),     # Position 2: 50%
-    round(3 * (n - 1) / 4)      # Position 3: 75%
-]
+Position 0 (2nd inversion):
+  Group 0: [3, 2, 0]   # Strings 6-5-4
+  Group 1: [2, 0, 3]   # Shares [2,0] on strings A&D
+  Group 2: [0, 3, 5]   # Shares [0,3] on strings D&G
+  Group 3: [0, 1, 0]   # Shares [3,5]→[0,1] on strings G&B
 ```
 
-**Why (n-1)?** We distribute across the **index range** [0, n-1], not the count [0, n]. This prevents position 3 from always being the absolute highest voicing.
+**Key Functions:**
+- `find_voicing_chains()`: Finds all valid [v0,v1,v2,v3] sequences
+- `voicings_share_notes()`: Checks if v1.notes[1:3] == v2.notes[0:2]
+- `select_4_positions_coordinated()`: Main selection with constraints
 
-**Example with 5 voicings** at frets [0.3, 4.3, 8.3, 12.3, 16.3]:
-- **Correct**: indices [0, 1, 2, 3] → positions at frets [0.3, 4.3, 8.3, 12.3] ✓
-- **Wrong** (using n-1 for P3): [0, 1, 2, 4] → positions at [0.3, 4.3, 8.3, 16.3] ❌
-
-**Bug History:**
-1. Original fixed ranges skipped fret-8 voicings → Fixed with quartiles
-2. Using `n-1` for position 3 pushed it too high (fret 17) → Fixed with `round(3*(n-1)/4)`
-
-Tests: `test_position_selection_bug.py` and `test_triad_validation.py` prevent regressions.
+**Inversion Pairing:**
+- P0 & P3 always have matching inversions (creates symmetry)
+- P1 & P2 use the other two inversions
+- Ensures musical coherence while spanning low→high fretboard
 
 ### Voicing Constraints & Validation
 
@@ -276,38 +312,79 @@ Tests: `test_position_selection_bug.py` and `test_triad_validation.py` prevent r
 - **All 3 triad notes required**: Root, 3rd, and 5th must all be present (no duplicates, no missing)
 - **Only triad notes allowed**: Every note must be in {root, 3rd, 5th} pitch class set
 - **Inversion detection**: Based on lowest note (low string = low pitch)
-  - Root position: lowest note is root
-  - 1st inversion: lowest note is 3rd
-  - 2nd inversion: lowest note is 5th
+  - Root position (△): lowest note is root
+  - 1st inversion (¹): lowest note is 3rd
+  - 2nd inversion (²): lowest note is 5th
 
-**Color Coding (CRITICAL for UI):**
-- **Root = Red** (#ef4444)
-- **3rd = Yellow** (#eab308) - NOT green!
-- **5th = Blue** (#3b82f6)
+### Circle of Fifths Color System
 
-Colors are based on **interval role** (root/3rd/5th), NOT string position. A note's color depends on which triad degree it is, regardless of which string or inversion.
+**NEW**: Each of the 12 chromatic notes has its own color based on circle of fifths:
 
-**Bug Fixed**: Originally, colors were assigned by string index (lowest=red), making all voicings look the same. Now colors correctly identify interval roles.
+- **C** → Red (#ef4444)
+- **G** → Orange (#f97316)
+- **D** → Yellow (#eab308)
+- **A** → Lime (#84cc16)
+- **E** → Green (#10b981)
+- **B** → Cyan (#06b6d4)
+- **F#/Gb** → Blue (#3b82f6)
+- **C#/Db** → Indigo (#6366f1)
+- **G#/Ab** → Violet (#8b5cf6)
+- **D#/Eb** → Magenta (#d946ef)
+- **A#/Bb** → Pink (#ec4899)
+- **F** → Rose (#f43f5e)
+
+**All notes on fretboard are visible:**
+- Chromatic background: 16px radius, 30% opacity (all 6 strings × 18 frets)
+- Triad notes: 16px radius, 100% opacity, overlaid on chromatic background
+- Colors identify **pitch class** (C, D, E, etc.), not interval role
+- Root notes get gold ring (#ffd700) for easy identification
+
+**Implementation:** `web/lib/guitar/note-colors.ts`
+
+### 10. Keyboard Navigation
+
+**Circle of fifths key selector** (visual buttons at top):
+- Lowercase letters → natural notes: `c`→C, `d`→D, `e`→E, etc.
+- Uppercase letters → sharp notes: `C`→C#, `D`→D#, `G`→G#, etc.
+- Special cases: `E`→F (E# = F), `B`→C (B# = C)
+- Selected key scales to 1.25x with white border
+
+**Implementation**: `web/components/MajorTriads.tsx`
 
 ## Known Issues & Gotchas
 
-### 1. Quartile Rounding
-With small numbers of voicings (e.g., 5), quartile selection is critical:
-- 5 voicings → indices `[0, 1, 2, 4]` (correct)
-- Don't use `n // 3` which gives `[0, 1, 3, 4]` (skips index 2!)
+### 1. Coordinated Selection Performance
+The chain-finding algorithm is O(n^4) where n = voicings per group (typically 5-7).
+With ~6 voicings per group: 6^4 = 1,296 iterations. Fast enough for real-time, but:
+- If adding more string groups, consider optimizing
+- Current implementation finds ~5 chains for most keys
+- Fallback to independent selection if < 4 chains found
 
 ### 2. Python/TypeScript Parity
 The triad logic MUST match between `main.py` and `web/lib/guitar/triads.ts`. When updating one, update the other. Tests verify this parity.
 
-### 3. String Indexing
-- `string_idx = 0` → 6th string (low E)
-- `string_idx = 5` → 1st string (high E)
-- Strings are indexed **low to high pitch**, not high to low visually
+### 3. String Indexing and Display Order
+- **Data indexing**: `string_idx = 0` → 6th string (low E), `string_idx = 5` → 1st string (high E)
+- **Visual display**: Reversed! String 1 (high E) at TOP, string 6 (low E) at BOTTOM
+- `allStringYPositions[5]` = top position, `allStringYPositions[0]` = bottom position
+- Matches natural guitar viewing perspective (thin strings "up", thick strings "down")
 
 ### 4. API Endpoint Returns 16 Voicings
 `GET /api/triads/{key}` returns 4 string groups × 4 positions = 16 voicings total. If a string group has fewer than 4 valid voicings, some positions may be missing.
 
-### 5. String Groups Share Strings (This is CORRECT!)
+### 5. Note Sharing Verification
+
+**With coordinated selection, adjacent groups MUST share notes on overlapping strings.**
+
+Tests in `position-note-sharing.test.ts` verify:
+- For each position (0-3)
+- For each adjacent group pair (0→1, 1→2, 2→3)
+- Last 2 notes of group k == First 2 notes of group k+1
+- Both notes AND frets must match
+
+If this test fails, the coordinated algorithm is broken!
+
+### 6. String Groups Share Strings (This is CORRECT!)
 
 **IMPORTANT**: Adjacent string groups share 2 strings. This means some notes WILL appear in the same location across different fretboards. **This is geometrically correct and expected!**
 
@@ -324,19 +401,89 @@ This is NOT a bug! It's the same physical location on the guitar neck, so differ
 
 **Validation**: Every voicing must contain ONLY the root, 3rd, and 5th of the key (e.g., C major = C, E, G only). See `test_triad_validation.py` for comprehensive checks.
 
-### 6. Long Neck View Shows All 6 Strings
+### 6. Horizontal Fretboard Layout
 
-The long neck fretboard diagrams display **all 6 strings** for spatial context:
-- **Active strings** (3 in the group): Bright, thick lines, bold blue names, note dots
-- **Inactive strings** (other 3): Dim, thin lines (30% opacity), gray names, no dots
+**Orientation:**
+- Fretboards rotated 90° from original vertical design
+- Frets run left→right (nut at left, high frets at right)
+- Strings run top→bottom (treble strings high, bass strings low)
+- String groups stacked vertically (3-2-1 on top, 6-5-4 on bottom)
+- SVG dimensions: 1400×400px (full page width)
 
-Visual examples:
-- **Strings 6-5-4** (E-A-D): Active on left, 3 dim strings on right
-- **Strings 5-4-3** (A-D-G): 1 dim on left, 3 active in middle, 2 dim on right
-- **Strings 4-3-2** (D-G-B): 2 dim on left, 3 active in middle, 1 dim on right
-- **Strings 3-2-1** (G-B-E): 3 dim strings on left, active on right
+**All 6 strings shown:**
+- Chromatic notes visible on all 6 strings
+- Active strings (3 per group): Bronze (6-5-4-3) or silver (2-1) colors
+- Realistic string thickness: 6th string 4.6x thicker than 1st string
+- All strings at 100% opacity always
 
-This helps identify which part of the neck you're viewing at a glance.
+### 7. Physics-Based Rendering
+
+**Fret spacing formula**: `position = scale_length × (1 - 2^(-fret/12))`
+- Uses 648mm (25.5") scale length (Fender standard)
+- Creates exponentially decreasing spacing (fret 1 tallest → fret 17 shortest)
+- 12th fret at natural halfway point (octave position)
+
+**String thickness**: Based on actual gauge measurements
+- 6th string: .046" (4.6x baseline)
+- 1st string: .010" (1.0x baseline)
+- Implemented in `getStringThickness()`
+
+**Note positioning**: Notes at 65% between frets (left of fret line)
+- Matches realistic finger placement on guitar
+- Function: `getNoteYPosition()` returns fret_prev + (fret_current - fret_prev) × 0.65
+
+**Visual details:**
+- Rosewood fretboard (#3d2817)
+- Natural wood guitar body (#d4a574)
+- Nickel-silver frets (#b8b8b8), bone nut (#e8dcc8)
+- Pearl inlay markers (#f5f5dc) at frets 3, 5, 7, 9, 12 (double), 15, 17
+- Frets extend 5px beyond fretboard wood (realistic overhang)
+
+### 8. Interactive Sound System
+
+**Web Audio API** with physics-based frequency generation:
+
+**Tuning reference**: A440 standard (1st string, fret 5 = 440 Hz)
+
+**Open string frequencies** (scientifically accurate):
+- String 6 (E2): 82.41 Hz
+- String 5 (A2): 110.00 Hz
+- String 4 (D3): 146.83 Hz
+- String 3 (G3): 196.00 Hz
+- String 2 (B3): 246.94 Hz
+- String 1 (E4): 329.63 Hz
+
+**Formula**: `frequency = open_string_freq × 2^(fret/12)`
+- Equal temperament (2^(1/12) semitone ratio)
+- 12th fret = perfect octave (2x frequency)
+- Verified up to fret 18 (no notes higher than they should be)
+
+**Playback behavior**:
+- **Hover individual note**: plays single note (2 sec duration)
+- **Hover near position** (96px radius): plays full chord (all 3 notes)
+- **Direct hover takes precedence**: stops chord, plays just that note
+- ADSR envelope: 10ms attack, 100ms decay, quiet sustain, 500ms release
+- Auto-stops previous sounds when hovering new notes
+
+**Implementation**: `web/lib/guitar/sound.ts`
+
+### 9. Multi-Level Hover Interactions
+
+**Hover zones** (proper precedence):
+1. **Position hover** (96px radius): All notes in position grow to 1.3x
+2. **Direct note hover** (26px radius): That note grows to 1.6x + yellow border
+3. **Other notes in same position**: Stay at 1.3x (position remains active)
+
+**Layered rendering** (fixes overlapping notes):
+- Layer 1 (background): All 96px position hover circles
+- Layer 2 (foreground): Visible notes with direct hover handlers
+- Ensures all notes are individually hoverable even when tightly packed
+
+**Visual feedback**:
+- Normal: 16px
+- Position active: 20.8px (1.3x)
+- Direct hover: 25.6px (1.6x) + yellow border
+- Root notes: Gold ring (#ffd700) always visible
 
 ## Remember
 
