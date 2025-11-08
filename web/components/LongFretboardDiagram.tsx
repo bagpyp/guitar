@@ -50,6 +50,9 @@ export default function LongFretboardDiagram({
   const [hoveredNearPosition, setHoveredNearPosition] = useState<number | null>(null);
   const [highlightedPosition, setHighlightedPosition] = useState<number | null>(null);
 
+  // Get the string group indices (e.g., [3, 4, 5] for strings 3-2-1)
+  const stringGroupIndices = voicings.length > 0 ? voicings[0].strings : [3, 4, 5];
+
   // Resume audio context on first interaction
   useEffect(() => {
     const handleFirstInteraction = () => {
@@ -101,9 +104,6 @@ export default function LongFretboardDiagram({
       stopAllSounds();
     }
   }, [hoveredNearPosition, hoveredDot, voicings, stringGroupIndices]);
-
-  // Get the string group indices (e.g., [3, 4, 5] for strings 3-2-1)
-  const stringGroupIndices = voicings.length > 0 ? voicings[0].strings : [3, 4, 5];
 
   // SVG dimensions - rotated 90 degrees (now horizontal)
   const width = 1400; // Full page width (frets span left-right)
