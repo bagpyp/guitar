@@ -19,7 +19,7 @@ httpx = "^0.25.0"
 [tool.poetry.scripts]
 guitar = "main:main"
 api = "api:main"
-serve = "uvicorn api:app --reload --port 8000"
+serve = "api:serve"
 
 [build-system]
 requires = ["poetry-core"]

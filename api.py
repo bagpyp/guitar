@@ -239,6 +239,17 @@ def get_triads(key: str) -> TriadsResponse:
     )
 
 
-if __name__ == "__main__":
+def serve():
+    """Run the API server with hot reload for development"""
+    import uvicorn
+    uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)
+
+
+def main():
+    """Run the API server (production mode, no reload)"""
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+if __name__ == "__main__":
+    main()
