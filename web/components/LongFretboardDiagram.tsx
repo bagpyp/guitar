@@ -68,17 +68,6 @@ export default function LongFretboardDiagram({
   // All 6 guitar strings (6th to 1st)
   const allStringNames = ['E', 'A', 'D', 'G', 'B', 'E'];
 
-  // Debug logging - detailed dot placement
-  console.log(`${stringGroupLabel}:`);
-  console.log(`  String indices: [${stringGroupIndices}] = [${stringGroupIndices.map(i => allStringNames[i])}]`);
-  voicings.forEach(v => {
-    console.log(`  Position ${v.position}:`);
-    v.frets.forEach((fret, localIdx) => {
-      const globalIdx = stringGroupIndices[localIdx];
-      console.log(`    String ${globalIdx} (${allStringNames[globalIdx]}): fret ${fret} = ${v.noteNames[localIdx]}`);
-    });
-  });
-
   // Calculate string X positions for all 6 strings
   const allStringXPositions = [
     stringSpacing * 1,
