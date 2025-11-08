@@ -83,19 +83,19 @@ export function findAllTriadVoicings(
   const voicings: Omit<TriadVoicing, 'position'>[] = [];
   const triadSet = new Set(triadPcs);
 
-  // Try all combinations of frets on the 3 strings
-  for (let fret1 = 0; fret1 <= 20; fret1++) {
-    // Low string
+  // Try all combinations of frets on the 3 strings (0-18 matches frontend limit)
+  for (let fret1 = 0; fret1 <= 18; fret1++) {
+    // Low string (0-18)
     const note1 = fretboard[stringGroup[0]][fret1];
     if (!triadSet.has(note1)) continue;
 
-    for (let fret2 = 0; fret2 <= 20; fret2++) {
-      // Mid string
+    for (let fret2 = 0; fret2 <= 18; fret2++) {
+      // Mid string (0-18)
       const note2 = fretboard[stringGroup[1]][fret2];
       if (!triadSet.has(note2)) continue;
 
-      for (let fret3 = 0; fret3 <= 20; fret3++) {
-        // High string
+      for (let fret3 = 0; fret3 <= 18; fret3++) {
+        // High string (0-18)
         const note3 = fretboard[stringGroup[2]][fret3];
         if (!triadSet.has(note3)) continue;
 
@@ -190,87 +190,114 @@ export function select4PositionsCoordinated(
   allGroupVoicings: Array<Omit<TriadVoicing, 'position'>[]>,
   triadPcs: [number, number, number]
 ): TriadVoicing[][] {
-  // Find all valid chains
-  const chains = findVoicingChains(allGroupVoicings);
-
-  if (chains.length < 4) {
-    // Fallback: not enough chains
-    return allGroupVoicings.map(v => select4Positions(v));
+  // POSITION 0: Use absolute lowest voicing for each group (independent selection)
+  const pos0Voicings: TriadVoicing[] = [];
+  for (const groupVoicings of allGroupVoicings) {
+    if (groupVoicings.length === 0) {
+      // Fallback if no voicings found
+      return allGroupVoicings.map(v => select4Positions(v));
+    }
+    // Sort by avgFret and take the lowest
+    const sortedVoicings = [...groupVoicings].sort((a, b) => a.avgFret - b.avgFret);
+    const lowest = { ...sortedVoicings[0], position: 0 };
+    pos0Voicings.push(lowest);
   }
 
-  // Group chains by inversion pattern
-  const chainsByPattern: Record<InversionType, Array<{avgFret: number; chain: Omit<TriadVoicing, 'position'>[]}>> = {
-    root: [],
-    first: [],
-    second: [],
-    unknown: [],
-  };
+  // POSITIONS 1-3: Find coordinated chains
+  let chains = findVoicingChains(allGroupVoicings);
 
-  for (const chain of chains) {
-    const avgFret = chain.reduce((sum, v) => sum + v.avgFret, 0) / 4;
-    const inv = chain[0].inversion;
-    chainsByPattern[inv].push({ avgFret, chain });
-  }
-
-  // Sort chains within each inversion group by avg fret
-  for (const inv in chainsByPattern) {
-    chainsByPattern[inv as InversionType].sort((a, b) => a.avgFret - b.avgFret);
-  }
-
-  // Find best inversion for P0/P3
-  const inversionTypes: InversionType[] = ['root', 'first', 'second'];
-  let bestPairedInv: InversionType | null = null;
-  let bestSpan = 0;
-
-  for (const inv of inversionTypes) {
-    const chainsList = chainsByPattern[inv];
-    if (chainsList.length >= 2) {
-      const span = chainsList[chainsList.length - 1].avgFret - chainsList[0].avgFret;
-      if (span > bestSpan) {
-        bestSpan = span;
-        bestPairedInv = inv;
+  // Filter out chains that duplicate Position 0 voicings for any group
+  const chainDuplicatesPos0 = (chain: Omit<TriadVoicing, 'position'>[]): boolean => {
+    for (let groupIdx = 0; groupIdx < chain.length; groupIdx++) {
+      const voicing = chain[groupIdx];
+      const pos0 = pos0Voicings[groupIdx];
+      if (JSON.stringify(voicing.frets) === JSON.stringify(pos0.frets)) {
+        return true;
       }
     }
+    return false;
+  };
+
+  const filteredChains = chains.filter(c => !chainDuplicatesPos0(c));
+
+  // Always use filtered chains (even if < 3), to avoid duplicates with Position 0
+  chains = filteredChains;
+
+  if (chains.length < 3) {
+    // Not enough chains for Positions 1-3, use fallback
+    // Keep Position 0 as lowest, fill rest with independent selection
+    const result: TriadVoicing[][] = [[], [], [], []];
+    pos0Voicings.forEach((voicing, groupIdx) => {
+      result[groupIdx].push(voicing);
+    });
+
+    // Add positions 1-3 independently
+    allGroupVoicings.forEach((groupVoicings, groupIdx) => {
+      const sortedVoicings = [...groupVoicings].sort((a, b) => a.avgFret - b.avgFret);
+      // Skip lowest (already used for Position 0)
+      const remaining = sortedVoicings.filter(v => v.avgFret > pos0Voicings[groupIdx].avgFret);
+
+      if (remaining.length >= 3) {
+        // Position 1: first of remaining (closest to Position 0)
+        // Position 2: middle (using (n-1)/2 for better distribution)
+        // Position 3: highest (last one)
+        const n = remaining.length;
+        const idx1 = 0;  // First of remaining
+        const idx2 = Math.floor((n - 1) / 2);  // Middle of the range [0, n-1]
+        const idx3 = n - 1;  // Highest
+
+        const v1 = { ...remaining[idx1], position: 1 };
+        result[groupIdx].push(v1);
+
+        const v2 = { ...remaining[idx2], position: 2 };
+        result[groupIdx].push(v2);
+
+        const v3 = { ...remaining[idx3], position: 3 };
+        result[groupIdx].push(v3);
+      } else if (remaining.length > 0) {
+        // Fill with what we have
+        remaining.slice(0, 3).forEach((v, i) => {
+          const vCopy = { ...v, position: i + 1 };
+          result[groupIdx].push(vCopy);
+        });
+      }
+    });
+
+    return result;
   }
 
-  if (bestPairedInv === null) {
-    return allGroupVoicings.map(v => select4Positions(v));
-  }
+  // Sort all chains by avg fret
+  const chainsWithAvg = chains.map(chain => ({
+    avgFret: chain.reduce((sum, v) => sum + v.avgFret, 0) / 4,
+    chain,
+  }));
+  chainsWithAvg.sort((a, b) => a.avgFret - b.avgFret);
 
-  // Select 4 chains with inversion constraints
-  const otherInvs = inversionTypes.filter(inv => inv !== bestPairedInv);
-  const selectedChains: Array<Omit<TriadVoicing, 'position'>[]> = [];
+  // Select chains for Positions 1, 2, 3
+  // Position 1: Lower-middle chain
+  // Position 2: Middle chain
+  // Position 3: Highest chain
+  const numChains = chainsWithAvg.length;
+  const pos1Idx = Math.min(numChains - 1, Math.floor(numChains / 4));  // Lower-middle
+  const pos2Idx = Math.min(numChains - 1, Math.floor(numChains / 2));  // Middle
+  const pos3Idx = numChains - 1;  // Highest
 
-  // Position 0: Lowest chain with paired inversion
-  if (chainsByPattern[bestPairedInv].length > 0) {
-    selectedChains.push(chainsByPattern[bestPairedInv][0].chain);
-  }
+  const pos1Chain = chainsWithAvg[pos1Idx].chain;
+  const pos2Chain = chainsWithAvg[pos2Idx].chain;
+  const pos3Chain = chainsWithAvg[pos3Idx].chain;
 
-  // Position 1: Chain from first "other" inversion
-  if (otherInvs[0] && chainsByPattern[otherInvs[0]].length > 0) {
-    const inv1Chains = chainsByPattern[otherInvs[0]];
-    const idx = Math.min(inv1Chains.length - 1, Math.floor(inv1Chains.length / 3));
-    selectedChains.push(inv1Chains[idx].chain);
-  }
-
-  // Position 2: Chain from second "other" inversion
-  if (otherInvs.length > 1 && chainsByPattern[otherInvs[1]].length > 0) {
-    const inv2Chains = chainsByPattern[otherInvs[1]];
-    const idx = Math.max(0, Math.floor(inv2Chains.length * 2 / 3));
-    selectedChains.push(inv2Chains[idx].chain);
-  }
-
-  // Position 3: Highest chain with paired inversion
-  if (chainsByPattern[bestPairedInv].length > 0) {
-    const chains = chainsByPattern[bestPairedInv];
-    selectedChains.push(chains[chains.length - 1].chain);
-  }
-
-  // Convert chains to grouped format
+  // Build result: 4 groups, each with 4 positions
   const result: TriadVoicing[][] = [[], [], [], []];
-  selectedChains.forEach((chain, posIdx) => {
+
+  // Add Position 0 (absolute lowest per group)
+  pos0Voicings.forEach((voicing, groupIdx) => {
+    result[groupIdx].push(voicing);
+  });
+
+  // Add Positions 1-3 (coordinated chains)
+  [pos1Chain, pos2Chain, pos3Chain].forEach((chain, posIdx) => {
     chain.forEach((voicing, groupIdx) => {
-      result[groupIdx].push({ ...voicing, position: posIdx });
+      result[groupIdx].push({ ...voicing, position: posIdx + 1 });
     });
   });
 

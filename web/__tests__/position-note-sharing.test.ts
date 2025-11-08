@@ -3,9 +3,13 @@ import { findAllTriadVoicings, select4PositionsCoordinated, buildMajorTriad } fr
 import { buildFretboard } from '../lib/guitar/core';
 
 /**
- * Test that adjacent string groups share notes correctly for the same position
+ * Test that adjacent string groups share notes correctly for coordinated positions
  *
- * Since adjacent string groups share 2 strings, the same position should have:
+ * NEW BEHAVIOR (as of algorithm update):
+ * - Position 0: Uses ABSOLUTE LOWEST voicings per group (NO note-sharing requirement)
+ * - Positions 1-3: Use coordinated chains (MUST share notes between adjacent groups)
+ *
+ * Since adjacent string groups share 2 strings, coordinated positions should have:
  * - Last 2 notes of group k = First 2 notes of group k+1
  *
  * For example:
@@ -13,8 +17,7 @@ import { buildFretboard } from '../lib/guitar/core';
  * - Group 1 (strings 5-4-3): [1,2,3]
  * - They share strings [1,2]
  *
- * So position 0 in group 0 should have the same notes on strings [1,2]
- * as position 0 in group 1 on strings [1,2]
+ * Positions 1-3 should maintain note-sharing, but Position 0 may not.
  */
 describe('Position Note Sharing Between Adjacent Groups', () => {
   const testKey = 'C';
@@ -37,7 +40,7 @@ describe('Position Note Sharing Between Adjacent Groups', () => {
   // Use coordinated selection
   const allGroupVoicings = select4PositionsCoordinated(allVoicingsPerGroup, triadPcs);
 
-  describe('Adjacent group note sharing for all positions', () => {
+  describe('Adjacent group note sharing for coordinated positions (1-3)', () => {
     // Test all adjacent group pairs (0→1, 1→2, 2→3)
     for (let groupIdx = 0; groupIdx < 3; groupIdx++) {
       const currentGroup = allGroupVoicings[groupIdx];
@@ -45,8 +48,8 @@ describe('Position Note Sharing Between Adjacent Groups', () => {
       const currentStrings = stringGroups[groupIdx];
       const nextStrings = stringGroups[groupIdx + 1];
 
-      // Test all 4 positions (0, 1, 2, 3)
-      for (let posIdx = 0; posIdx < 4; posIdx++) {
+      // Test positions 1-3 (Position 0 uses absolute lowest, no sharing required)
+      for (let posIdx = 1; posIdx <= 3; posIdx++) {
         it(`should share notes for position ${posIdx} between group ${groupIdx} and ${groupIdx + 1}`, () => {
           const currentVoicing = currentGroup.find(v => v.position === posIdx);
           const nextVoicing = nextGroup.find(v => v.position === posIdx);
@@ -93,31 +96,30 @@ describe('Position Note Sharing Between Adjacent Groups', () => {
     }
   });
 
-  describe('Inversion pairing constraint', () => {
-    it('should have positions 0 and 3 with same inversion type', () => {
+  describe('Position 0 uses absolute lowest voicings', () => {
+    it('should have Position 0 with lowest avg_fret for each group', () => {
+      // For each group, Position 0 should be the lowest available voicing
       allGroupVoicings.forEach((groupVoicings, groupIdx) => {
         const pos0 = groupVoicings.find(v => v.position === 0);
-        const pos3 = groupVoicings.find(v => v.position === 3);
+        const otherPositions = groupVoicings.filter(v => v.position !== 0);
 
-        if (pos0 && pos3) {
-          expect(pos0.inversion).toBe(pos3.inversion);
+        if (pos0 && otherPositions.length > 0) {
+          // Position 0 should have lower or equal avgFret than all other positions
+          otherPositions.forEach(otherPos => {
+            expect(pos0.avgFret).toBeLessThanOrEqual(otherPos.avgFret);
+          });
         }
       });
     });
 
-    it('should have positions 1 and 2 with different inversions from 0/3', () => {
+    it('should have all positions span the fretboard', () => {
+      // Verify positions 0-3 are in ascending order by avgFret
       allGroupVoicings.forEach((groupVoicings, groupIdx) => {
-        const pos0 = groupVoicings.find(v => v.position === 0);
-        const pos1 = groupVoicings.find(v => v.position === 1);
-        const pos2 = groupVoicings.find(v => v.position === 2);
+        const sorted = [...groupVoicings].sort((a, b) => a.position - b.position);
 
-        if (pos0 && pos1 && pos2) {
-          // Positions 1 and 2 should not have the same inversion as 0
-          expect(pos1.inversion).not.toBe(pos0.inversion);
-          expect(pos2.inversion).not.toBe(pos0.inversion);
-
-          // Positions 1 and 2 should be different from each other
-          expect(pos1.inversion).not.toBe(pos2.inversion);
+        for (let i = 0; i < sorted.length - 1; i++) {
+          // Each position should have avgFret <= next position's avgFret
+          expect(sorted[i].avgFret).toBeLessThanOrEqual(sorted[i + 1].avgFret);
         }
       });
     });

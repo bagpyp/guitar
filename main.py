@@ -405,18 +405,18 @@ def find_all_triad_voicings(triad_pcs: list, string_group: list, fretboard: dict
     voicings = []
     triad_set = set(triad_pcs)
 
-    # Try all combinations of frets on the 3 strings
-    for fret1 in range(21):  # Low string
+    # Try all combinations of frets on the 3 strings (0-18 matches frontend limit)
+    for fret1 in range(19):  # Low string (0-18)
         note1 = fretboard[string_group[0]][fret1]
         if note1 not in triad_set:
             continue
 
-        for fret2 in range(21):  # Mid string
+        for fret2 in range(19):  # Mid string (0-18)
             note2 = fretboard[string_group[1]][fret2]
             if note2 not in triad_set:
                 continue
 
-            for fret3 in range(21):  # High string
+            for fret3 in range(19):  # High string (0-18)
                 note3 = fretboard[string_group[2]][fret3]
                 if note3 not in triad_set:
                     continue
@@ -496,10 +496,13 @@ def select_4_positions_coordinated(all_group_voicings: list[list], triad_pcs: tu
     """
     Select 4 positions across all 4 string groups with coordination.
 
+    NEW BEHAVIOR: Position 0 uses absolute lowest voicing for each group (prioritizes
+    low frets over coordination). Positions 1-3 maintain coordination via chains.
+
     Ensures:
-    1. Positions 0 & 3 have same inversion type
-    2. Positions 1 & 2 have the other two inversion types
-    3. Adjacent groups share notes on overlapping strings
+    1. Position 0: Absolute lowest voicing per group (may break note-sharing)
+    2. Positions 1-3: Coordinated chains where adjacent groups share notes
+    3. Position 3: Highest position on fretboard
 
     Args:
         all_group_voicings: List of 4 lists, one for each string group (unsorted, unfiltered)
@@ -508,73 +511,105 @@ def select_4_positions_coordinated(all_group_voicings: list[list], triad_pcs: tu
     Returns:
         List of 4 lists, each with 4 selected voicings
     """
-    # Find all valid chains
+    # POSITION 0: Use absolute lowest voicing for each group (independent selection)
+    pos0_voicings = []
+    for group_voicings in all_group_voicings:
+        if not group_voicings:
+            # Fallback if no voicings found
+            return [select_4_positions(gv) for gv in all_group_voicings]
+        # Sort by avg_fret and take the lowest
+        sorted_voicings = sorted(group_voicings, key=lambda v: v["avg_fret"])
+        lowest = sorted_voicings[0].copy()
+        lowest["position"] = 0
+        pos0_voicings.append(lowest)
+
+    # POSITIONS 1-3: Find coordinated chains
     chains = find_voicing_chains(all_group_voicings)
 
-    if len(chains) < 4:
-        # Fallback: not enough chains, use independent selection
-        return [select_4_positions(group_voicings) for group_voicings in all_group_voicings]
+    # Filter out chains that duplicate Position 0 voicings for any group
+    def chain_duplicates_pos0(chain):
+        """Check if chain has same voicing as Position 0 for any group"""
+        for group_idx, voicing in enumerate(chain):
+            pos0 = pos0_voicings[group_idx]
+            if voicing["frets"] == pos0["frets"]:
+                return True
+        return False
 
-    # Group chains by inversion pattern
-    chains_by_pattern = {}
+    filtered_chains = [c for c in chains if not chain_duplicates_pos0(c)]
+
+    # Always use filtered chains (even if < 3), to avoid duplicates with Position 0
+    chains = filtered_chains
+
+    if len(chains) < 3:
+        # Not enough chains for Positions 1-3, use fallback
+        # Keep Position 0 as lowest, fill rest with independent selection
+        result = [[], [], [], []]  # 4 groups
+        for group_idx, voicing in enumerate(pos0_voicings):
+            result[group_idx].append(voicing)
+
+        # Add positions 1-3 independently
+        for group_idx, group_voicings in enumerate(all_group_voicings):
+            sorted_voicings = sorted(group_voicings, key=lambda v: v["avg_fret"])
+            # Skip lowest (already used for Position 0)
+            remaining = [v for v in sorted_voicings if v["avg_fret"] > pos0_voicings[group_idx]["avg_fret"]]
+            if len(remaining) >= 3:
+                # Position 1: first of remaining (closest to Position 0)
+                # Position 2: middle (using (n-1)//2 for better distribution)
+                # Position 3: highest (last one)
+                n = len(remaining)
+                idx1 = 0  # First of remaining
+                idx2 = (n - 1) // 2  # Middle of the range [0, n-1]
+                idx3 = n - 1  # Highest
+
+                v1 = remaining[idx1].copy()
+                v1["position"] = 1
+                result[group_idx].append(v1)
+
+                v2 = remaining[idx2].copy()
+                v2["position"] = 2
+                result[group_idx].append(v2)
+
+                v3 = remaining[idx3].copy()
+                v3["position"] = 3
+                result[group_idx].append(v3)
+            elif remaining:
+                # Fill with what we have
+                for pos, v in enumerate(remaining[:3], start=1):
+                    v_copy = v.copy()
+                    v_copy["position"] = pos
+                    result[group_idx].append(v_copy)
+
+        return result
+
+    # Sort all chains by avg fret
+    chains_with_avg = []
     for chain in chains:
-        # Get avg fret for sorting
         avg_fret = sum(v["avg_fret"] for v in chain) / 4
+        chains_with_avg.append((avg_fret, chain))
+    chains_with_avg.sort(key=lambda x: x[0])
 
-        # Get inversion of first group (they should all be similar in a chain)
-        inv = chain[0]["inversion"]
+    # Select chains for Positions 1, 2, 3
+    # Position 1: Lower-middle chain
+    # Position 2: Middle chain
+    # Position 3: Highest chain
+    num_chains = len(chains_with_avg)
+    pos1_idx = min(num_chains - 1, num_chains // 4)  # Lower-middle
+    pos2_idx = min(num_chains - 1, num_chains // 2)  # Middle
+    pos3_idx = num_chains - 1  # Highest
 
-        if inv not in chains_by_pattern:
-            chains_by_pattern[inv] = []
-        chains_by_pattern[inv].append((avg_fret, chain))
+    pos1_chain = chains_with_avg[pos1_idx][1]
+    pos2_chain = chains_with_avg[pos2_idx][1]
+    pos3_chain = chains_with_avg[pos3_idx][1]
 
-    # Sort chains within each inversion group by avg fret
-    for inv in chains_by_pattern:
-        chains_by_pattern[inv].sort(key=lambda x: x[0])
-
-    # Sort ALL chains by avg fret globally
-    all_chains_sorted = [(avg_fret, chain) for chain in chains]
-    all_chains_sorted.sort(key=lambda x: x[0])
-
-    # ALWAYS use the absolute lowest chain for P0
-    pos0_chain = all_chains_sorted[0][1]
-    paired_inv = pos0_chain[0]["inversion"]
-
-    # Find the highest chain with matching inversion for P3
-    pos3_chain = None
-    for avg_fret, chain in reversed(all_chains_sorted):
-        if chain[0]["inversion"] == paired_inv:
-            pos3_chain = chain
-            break
-
-    if pos3_chain is None:
-        # Can't find matching P3, use fallback
-        return [select_4_positions(group_voicings) for group_voicings in all_group_voicings]
-
-    # Get the other two inversions for P1/P2
-    inversion_types = ["root", "first", "second"]
-    other_invs = [inv for inv in inversion_types if inv != paired_inv]
-
-    selected_chains = [pos0_chain]
-
-    # Position 1: Lower-middle chain from first "other" inversion
-    if other_invs[0] in chains_by_pattern and chains_by_pattern[other_invs[0]]:
-        inv1_chains = chains_by_pattern[other_invs[0]]
-        idx = min(len(inv1_chains) - 1, len(inv1_chains) // 3)
-        selected_chains.append(inv1_chains[idx][1])
-
-    # Position 2: Higher-middle chain from second "other" inversion
-    if len(other_invs) > 1 and other_invs[1] in chains_by_pattern and chains_by_pattern[other_invs[1]]:
-        inv2_chains = chains_by_pattern[other_invs[1]]
-        idx = max(0, len(inv2_chains) * 2 // 3)
-        selected_chains.append(inv2_chains[idx][1])
-
-    # Position 3: Highest chain with matching inversion
-    selected_chains.append(pos3_chain)
-
-    # Convert chains to grouped format
+    # Build result: 4 groups, each with 4 positions
     result = [[], [], [], []]  # 4 groups
-    for pos_idx, chain in enumerate(selected_chains):
+
+    # Add Position 0 (absolute lowest per group)
+    for group_idx, voicing in enumerate(pos0_voicings):
+        result[group_idx].append(voicing)
+
+    # Add Positions 1-3 (coordinated chains)
+    for pos_idx, chain in enumerate([pos1_chain, pos2_chain, pos3_chain], start=1):
         for group_idx, voicing in enumerate(chain):
             voicing_copy = voicing.copy()
             voicing_copy["position"] = pos_idx
