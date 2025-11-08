@@ -122,9 +122,9 @@ export default function LongFretboardDiagram({
                 {/* Fret line - spans all 6 strings vertically */}
                 <line
                   x1={x}
-                  y1={allStringYPositions[0] - 20}
+                  y1={allStringYPositions[5] - 20}
                   x2={x}
-                  y2={allStringYPositions[5] + 20}
+                  y2={allStringYPositions[0] + 20}
                   stroke={isNut ? '#e8dcc8' : '#b8b8b8'}
                   strokeWidth={isNut ? 4 : 2}
                 />
