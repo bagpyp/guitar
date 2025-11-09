@@ -5,6 +5,7 @@ import type { TriadVoicing } from '../lib/guitar/triads';
 import { calculateFretYPositions, getNoteYPosition, getStringThickness, getNoteAtPosition } from '../lib/guitar/fretboard-physics';
 import { getNoteColor, getAllNoteColorsInCircleOfFifths } from '../lib/guitar/note-colors';
 import { playNote, playChord, stopAllSounds, resumeAudioContext } from '../lib/guitar/sound';
+import { DIMENSIONS, calculateAllStringYPositions } from '../lib/guitar/fretboard-dimensions';
 
 interface LongFretboardDiagramProps {
   voicings: TriadVoicing[]; // All 4 positions for this string group
@@ -84,53 +85,57 @@ export default function LongFretboardDiagram({
     }
   }, [hoveredDot, voicings, stringGroupIndices]);
 
-  // Play chord when hovering near a position (but not on a specific note)
-  useEffect(() => {
-    if (hoveredNearPosition !== null && hoveredDot === null) {
-      // Find all voicings in this position
-      const positionVoicings = voicings.filter(v => v.position === hoveredNearPosition);
+  // Play chord when clicking on a position area
+  const handlePositionClick = (position: number) => {
+    // Find all voicings in this position
+    const positionVoicings = voicings.filter(v => v.position === position);
 
-      if (positionVoicings.length > 0) {
-        // Play the first voicing as a chord (they should all be the same position)
-        const voicing = positionVoicings[0];
-        const chordNotes = voicing.frets.map((fret, localIdx) => ({
-          stringIndex: stringGroupIndices[localIdx],
-          fret,
-        }));
+    if (positionVoicings.length > 0) {
+      // Play the first voicing as a chord (they should all be the same position)
+      const voicing = positionVoicings[0];
+      const chordNotes = voicing.frets.map((fret, localIdx) => ({
+        stringIndex: stringGroupIndices[localIdx],
+        fret,
+      }));
 
-        playChord(chordNotes, 2.0);
-      }
-    } else if (hoveredNearPosition === null && hoveredDot === null) {
-      stopAllSounds();
+      playChord(chordNotes, 2.0);
     }
-  }, [hoveredNearPosition, hoveredDot, voicings, stringGroupIndices]);
+  };
 
   // SVG dimensions - rotated 90 degrees (now horizontal)
-  const width = 1400; // Full page width (frets span left-right)
-  const height = 400; // Compact height (strings span top-bottom)
-  const numFrets = 18; // Show frets 0-17 (cut off high frets near sound hole)
-  const startFret = 0;
-  const stringSpacing = height / 7; // Space for 6 strings with margins
+  const width = DIMENSIONS.svgWidth; // Fretboard width (frets span left-right)
+  const height = DIMENSIONS.svgHeight; // Compact height (strings span top-bottom)
+  const numFrets = DIMENSIONS.numFrets; // Show frets 0-17 (cut off high frets near sound hole)
+  const startFret = DIMENSIONS.startFret;
+  const openStringOffset = DIMENSIONS.openStringOffset; // Space for open string notes beyond nut
+  const viewBoxWidth = DIMENSIONS.viewBoxWidth; // Total width including open string space
 
   // Calculate physics-based fret positions (now horizontal X positions)
-  const fretXPositions = calculateFretYPositions(startFret, numFrets, width);
+  // These are relative to the fretboard, we'll offset them later
+  const fretXPositionsRelative = calculateFretYPositions(startFret, numFrets, width);
+
+  // Offset all fret positions to make room for open string notes on the left
+  const fretXPositions = fretXPositionsRelative.map(x => x + openStringOffset);
 
   // All 6 guitar strings (6th to 1st)
   const allStringNames = ['E', 'A', 'D', 'G', 'B', 'E'];
 
   // Calculate string Y positions for all 6 strings (now vertical)
   // Reversed: string 1 (index 5) at top, string 6 (index 0) at bottom
-  const allStringYPositions = [
-    stringSpacing * 6, // String 6 (index 0) - bottom (thickest)
-    stringSpacing * 5, // String 5 (index 1)
-    stringSpacing * 4, // String 4 (index 2)
-    stringSpacing * 3, // String 3 (index 3)
-    stringSpacing * 2, // String 2 (index 4)
-    stringSpacing * 1, // String 1 (index 5) - top (thinnest)
-  ];
+  const allStringYPositions = calculateAllStringYPositions();
 
   // Determine which strings are active (part of this group)
   const activeStringIndices = new Set(stringGroupIndices);
+
+  // Helper function to get note X position (handles open strings specially)
+  const getNoteXPosition = (fret: number): number => {
+    if (fret === 0) {
+      // Open string - place in the "air" space before the nut
+      return openStringOffset / 2;
+    }
+    // Regular fretted notes
+    return getNoteYPosition(fret, fretXPositions, startFret);
+  };
 
   // Group all dots by fret and string to detect overlaps
   const dotPositions = new Map<string, Array<{ voicingIdx: number; stringIdx: number }>>();
@@ -145,24 +150,35 @@ export default function LongFretboardDiagram({
   });
 
   return (
-    <div className="flex flex-col items-center gap-4 p-6 rounded-lg border w-full" style={{ backgroundColor: '#d4a574', borderColor: '#b8935f' }}>
+    <div className="flex flex-col items-center w-full">
       {/* SVG Long Fretboard */}
-      <div className="relative w-full">
-        <div className="w-full overflow-x-auto">
+      <div className="relative" style={{ width: '98vw', maxWidth: '100%' }}>
         <svg
-          width={width}
+          width="100%"
           height={height}
           className="rounded-lg"
-          viewBox={`0 0 ${width} ${height}`}
+          viewBox={`0 0 ${viewBoxWidth} ${height}`}
+          preserveAspectRatio="xMidYMid meet"
         >
-          {/* Fretboard wood - slightly narrower than frets */}
+          {/* SVG Filters */}
+          <defs>
+            <filter id="golden-glow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+              <feMerge>
+                <feMergeNode in="coloredBlur"/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+          </defs>
+
+          {/* Fretboard wood - starts at nut (after open string space) */}
           <rect
-            x={0}
-            y={allStringYPositions[5] - 15}
+            x={openStringOffset}
+            y={allStringYPositions[5] - DIMENSIONS.fretboardMarginTop}
             width={width}
-            height={allStringYPositions[0] - allStringYPositions[5] + 30}
+            height={allStringYPositions[0] - allStringYPositions[5] + DIMENSIONS.fretboardMarginTop + DIMENSIONS.fretboardMarginBottom}
             fill="#3d2817"
-            rx={8}
+            rx={DIMENSIONS.fretboardBorderRadius}
           />
 
           {/* Fret lines - now vertical */}
@@ -175,22 +191,22 @@ export default function LongFretboardDiagram({
                 {/* Fret line - spans all 6 strings vertically */}
                 <line
                   x1={x}
-                  y1={allStringYPositions[5] - 20}
+                  y1={allStringYPositions[5] - DIMENSIONS.fretLineExtensionTop}
                   x2={x}
-                  y2={allStringYPositions[0] + 20}
+                  y2={allStringYPositions[0] + DIMENSIONS.fretLineExtensionBottom}
                   stroke={isNut ? '#e8dcc8' : '#b8b8b8'}
-                  strokeWidth={isNut ? 4 : 2}
+                  strokeWidth={isNut ? DIMENSIONS.nutWidth : DIMENSIONS.fretLineWidth}
                 />
                 {/* Fret markers (3, 5, 7, 9, 15, 17) - pearl inlays */}
                 {[3, 5, 7, 9, 15, 17].includes(fretIdx) && fretIdx < numFrets && (
                   <circle
                     cx={getNoteYPosition(fretIdx, fretXPositions, startFret)}
                     cy={height / 2}
-                    r={10}
+                    r={DIMENSIONS.fretMarkerRadius}
                     fill="#f5f5dc"
                     opacity={0.95}
                     stroke="#ffffff"
-                    strokeWidth={1}
+                    strokeWidth={DIMENSIONS.fretMarkerStrokeWidth}
                   />
                 )}
                 {/* Double dots at 12th fret - pearl inlays */}
@@ -199,20 +215,20 @@ export default function LongFretboardDiagram({
                     <circle
                       cx={getNoteYPosition(12, fretXPositions, startFret)}
                       cy={(allStringYPositions[1] + allStringYPositions[2]) / 2}
-                      r={10}
+                      r={DIMENSIONS.fretMarkerRadius}
                       fill="#f5f5dc"
                       opacity={0.95}
                       stroke="#ffffff"
-                      strokeWidth={1}
+                      strokeWidth={DIMENSIONS.fretMarkerStrokeWidth}
                     />
                     <circle
                       cx={getNoteYPosition(12, fretXPositions, startFret)}
                       cy={(allStringYPositions[3] + allStringYPositions[4]) / 2}
-                      r={10}
+                      r={DIMENSIONS.fretMarkerRadius}
                       fill="#f5f5dc"
                       opacity={0.95}
                       stroke="#ffffff"
-                      strokeWidth={1}
+                      strokeWidth={DIMENSIONS.fretMarkerStrokeWidth}
                     />
                   </>
                 )}
@@ -236,7 +252,7 @@ export default function LongFretboardDiagram({
             return (
               <line
                 key={`string-${stringIdx}`}
-                x1={fretXPositions[0]}
+                x1={0}
                 y1={y}
                 x2={fretXPositions[numFrets]}
                 y2={y}
@@ -251,7 +267,7 @@ export default function LongFretboardDiagram({
           <g>
             {allStringYPositions.map((y, globalStringIdx) => {
               return Array.from({ length: numFrets + 1 }).map((_, fretIdx) => {
-                const x = getNoteYPosition(fretIdx, fretXPositions, startFret);
+                const x = getNoteXPosition(fretIdx);
                 const { noteName } = getNoteAtPosition(globalStringIdx, fretIdx);
                 const noteColor = getNoteColor(noteName);
 
@@ -261,7 +277,7 @@ export default function LongFretboardDiagram({
                     <circle
                       cx={x}
                       cy={y}
-                      r={16}
+                      r={DIMENSIONS.chromaticNoteRadius}
                       fill={noteColor.bg}
                       opacity={0.3}
                     />
@@ -270,7 +286,7 @@ export default function LongFretboardDiagram({
                       x={x}
                       y={y}
                       fill={noteColor.text}
-                      fontSize="12"
+                      fontSize={DIMENSIONS.chromaticNoteFontSize}
                       fontWeight="bold"
                       textAnchor="middle"
                       dominantBaseline="middle"
@@ -291,21 +307,21 @@ export default function LongFretboardDiagram({
               return voicing.frets.map((fret, localStringIdx) => {
                 const globalStringIdx = stringGroupIndices[localStringIdx];
                 const y = allStringYPositions[globalStringIdx];
-                const x = getNoteYPosition(fret, fretXPositions, startFret);
+                const x = getNoteXPosition(fret);
 
                 const key = `${fret}-${localStringIdx}`;
                 const dotsAtPosition = dotPositions.get(key) || [];
                 const dotIndex = dotsAtPosition.findIndex(
                   (d) => d.voicingIdx === voicingIdx && d.stringIdx === localStringIdx
                 );
-                const offsetX = dotsAtPosition.length > 1 ? (dotIndex - 0.5) * 8 : 0;
+                const offsetX = dotsAtPosition.length > 1 ? (dotIndex - 0.5) * DIMENSIONS.noteOverlapOffset : 0;
 
                 return (
                   <circle
                     key={`position-hover-${voicingIdx}-${localStringIdx}`}
                     cx={x + offsetX}
                     cy={y}
-                    r={96}
+                    r={DIMENSIONS.positionHoverRadius}
                     fill="transparent"
                     style={{ cursor: 'pointer' }}
                     onMouseEnter={() => {
@@ -313,6 +329,9 @@ export default function LongFretboardDiagram({
                     }}
                     onMouseLeave={() => {
                       setHoveredNearPosition(null);
+                    }}
+                    onClick={() => {
+                      handlePositionClick(voicing.position);
                     }}
                   />
                 );
@@ -333,7 +352,7 @@ export default function LongFretboardDiagram({
                   // Map local string index (0-2) to global string index (0-5)
                   const globalStringIdx = stringGroupIndices[localStringIdx];
                   const y = allStringYPositions[globalStringIdx];
-                  const x = getNoteYPosition(fret, fretXPositions, startFret);
+                  const x = getNoteXPosition(fret);
 
                   const notePc = voicing.notes[localStringIdx];
                   const intervalName = getIntervalName(notePc, triadPcs);
@@ -359,18 +378,17 @@ export default function LongFretboardDiagram({
                   const dotIndex = dotsAtPosition.findIndex(
                     (d) => d.voicingIdx === voicingIdx && d.stringIdx === localStringIdx
                   );
-                  const offsetX = dotsAtPosition.length > 1 ? (dotIndex - 0.5) * 8 : 0;
+                  const offsetX = dotsAtPosition.length > 1 ? (dotIndex - 0.5) * DIMENSIONS.noteOverlapOffset : 0;
 
                   // Size logic with proper precedence:
-                  // 1. Direct hover on THIS note: 1.6x (takes precedence)
-                  // 2. Direct hover on ANOTHER note in this position: 1.3x (position active)
-                  // 3. Near hover (within 96px) of any note in this position: 1.3x (position active)
-                  // 4. Normal: 16px (1.0x)
-                  let radius = 16;
+                  // 1. Direct hover on THIS note: 2.1x (largest)
+                  // 2. Position hover (direct hover on another note in position OR near hover): 1.6x
+                  // 3. Default triad notes: 1.3x (always visible at medium size)
+                  let radius = DIMENSIONS.noteRadius * DIMENSIONS.defaultTriadNoteMultiplier;
                   if (isDirectHover) {
-                    radius = 16 * 1.6; // 25.6px - this note is directly hovered
+                    radius = DIMENSIONS.noteRadius * DIMENSIONS.directHoverSizeMultiplier;
                   } else if (isSamePositionAsDirectHover || isPositionHovered) {
-                    radius = 16 * 1.3; // 20.8px - position is active
+                    radius = DIMENSIONS.noteRadius * DIMENSIONS.positionHoverSizeMultiplier;
                   }
 
                   return (
@@ -378,17 +396,43 @@ export default function LongFretboardDiagram({
                       key={`dot-${voicingIdx}-${localStringIdx}`}
                       transform={`translate(${offsetX}, 0)`}
                     >
-                      {/* Root note gold ring */}
+                      {/* Root note golden halo */}
                       {isRoot && (
-                        <circle
-                          cx={x}
-                          cy={y}
-                          r={radius + 3}
-                          fill="none"
-                          stroke="#ffd700"
-                          strokeWidth={2}
-                          pointerEvents="none"
-                        />
+                        <g pointerEvents="none">
+                          {/* Outer glow ring */}
+                          <circle
+                            cx={x}
+                            cy={y}
+                            r={radius + DIMENSIONS.rootNoteRingOffset + 3}
+                            fill="none"
+                            stroke="#ffd700"
+                            strokeWidth={1}
+                            opacity={0.3}
+                            filter="url(#golden-glow)"
+                          />
+                          {/* Middle glow ring */}
+                          <circle
+                            cx={x}
+                            cy={y}
+                            r={radius + DIMENSIONS.rootNoteRingOffset + 1.5}
+                            fill="none"
+                            stroke="#ffd700"
+                            strokeWidth={1.5}
+                            opacity={0.5}
+                            filter="url(#golden-glow)"
+                          />
+                          {/* Main bright ring */}
+                          <circle
+                            cx={x}
+                            cy={y}
+                            r={radius + DIMENSIONS.rootNoteRingOffset}
+                            fill="none"
+                            stroke="#ffd700"
+                            strokeWidth={DIMENSIONS.rootNoteRingWidth}
+                            opacity={0.9}
+                            filter="url(#golden-glow)"
+                          />
+                        </g>
                       )}
                       {/* Note color dot - handles direct hover */}
                       <circle
@@ -397,7 +441,7 @@ export default function LongFretboardDiagram({
                         r={radius}
                         fill={noteColor.bg}
                         stroke={isDirectHover ? '#fbbf24' : 'none'}
-                        strokeWidth={isDirectHover ? 3 : 0}
+                        strokeWidth={isDirectHover ? DIMENSIONS.hoverStrokeWidth : 0}
                         style={{ cursor: 'pointer' }}
                         onMouseEnter={() => {
                           setHoveredDot({ voicingIdx, stringIdx: localStringIdx });
@@ -413,7 +457,7 @@ export default function LongFretboardDiagram({
                         x={x}
                         y={y}
                         fill={noteColor.text}
-                        fontSize={isDirectHover ? '14' : '12'}
+                        fontSize={isDirectHover ? DIMENSIONS.noteHoverFontSize : DIMENSIONS.noteFontSize}
                         fontWeight={isRoot ? 'bold' : 'bold'}
                         textAnchor="middle"
                         dominantBaseline="middle"
@@ -430,9 +474,9 @@ export default function LongFretboardDiagram({
 
           {/* Inversion symbols below fretboard as SVG text */}
           {voicings.map((voicing, voicingIdx) => {
-            // Get X position of LEFTMOST note (lowest fret) in this voicing
-            const minFret = Math.min(...voicing.frets);
-            const leftmostX = getNoteYPosition(minFret, fretXPositions, startFret);
+            // Get average X position of all notes in this voicing
+            const xPositions = voicing.frets.map(fret => getNoteXPosition(fret));
+            const averageX = xPositions.reduce((sum, x) => sum + x, 0) / xPositions.length;
 
             // Map inversion to music theory symbol
             // Root position: △ (triangle/delta)
@@ -445,10 +489,10 @@ export default function LongFretboardDiagram({
             return (
               <text
                 key={`inversion-${voicingIdx}`}
-                x={leftmostX}
-                y={height - 10}
+                x={averageX}
+                y={height - DIMENSIONS.inversionSymbolYOffset}
                 fill="#4a3020"
-                fontSize="24"
+                fontSize={DIMENSIONS.inversionSymbolFontSize}
                 fontWeight="bold"
                 textAnchor="middle"
                 dominantBaseline="middle"
@@ -458,7 +502,6 @@ export default function LongFretboardDiagram({
             );
           })}
         </svg>
-        </div>
       </div>
     </div>
   );

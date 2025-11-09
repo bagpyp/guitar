@@ -1,9 +1,17 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { stringIndexToOrdinal, STRING_NAMES } from '@/lib/guitar';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import {
+  stringIndexToOrdinal,
+  STRING_NAMES,
+  buildFretboard,
+  findBestPosition,
+  parentMajor,
+  getXyzDisplayString,
+  planXyzPositions
+} from '@/lib/guitar';
+import { MODES, NOTE_NAMES_SHARP } from '@/lib/guitar/constants';
+import type { Mode } from '@/lib/guitar/types';
 
 interface Challenge {
   mode: string;
@@ -31,20 +39,38 @@ interface Answer {
   xyzLayout: XYZPosition[];
 }
 
-async function generateChallenge(): Promise<Challenge> {
-  const response = await fetch(`${API_URL}/api/challenge`);
-  if (!response.ok) throw new Error('Failed to fetch challenge');
-  return response.json();
+// Build fretboard once (shared across all challenges)
+const fretboard = buildFretboard();
+
+function generateChallenge(): Challenge {
+  const mode = MODES[Math.floor(Math.random() * MODES.length)];
+  const note = NOTE_NAMES_SHARP[Math.floor(Math.random() * NOTE_NAMES_SHARP.length)];
+  const targetFret = Math.floor(Math.random() * 12) + 1; // 1-12
+
+  return { mode, note, targetFret };
 }
 
-async function getAnswer(challenge: Challenge): Promise<Answer> {
-  const response = await fetch(`${API_URL}/api/answer`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(challenge),
-  });
-  if (!response.ok) throw new Error('Failed to fetch answer');
-  return response.json();
+function getAnswer(challenge: Challenge): Answer {
+  const { mode, note, targetFret } = challenge;
+
+  // Find best position
+  const position = findBestPosition(note, targetFret, fretboard);
+
+  // Get parent key
+  const key = parentMajor(mode as Mode, note);
+
+  // Get XYZ pattern
+  const xyzPattern = getXyzDisplayString(mode as Mode);
+
+  // Get XYZ layout
+  const xyzLayout = planXyzPositions(mode as Mode, position.stringIndex, position.fret);
+
+  return {
+    key,
+    position,
+    xyzPattern,
+    xyzLayout,
+  };
 }
 
 function getOrdinalSuffix(num: number): string {
@@ -72,7 +98,7 @@ export default function ScalePractice() {
     loadNewChallenge();
   }, []);
 
-  const loadNewChallenge = async () => {
+  const loadNewChallenge = () => {
     try {
       setLoading(true);
       setError(null);
@@ -89,24 +115,24 @@ export default function ScalePractice() {
         setStreak(0);
       }
 
-      const newChallenge = await generateChallenge();
+      const newChallenge = generateChallenge();
       setChallenge(newChallenge);
       setAnswer(null);
       setShowKey(false);
       setShowPosition(false);
       setShowShape(false);
     } catch (e) {
-      setError('Failed to load challenge. Is the API server running?');
+      setError('Failed to load challenge.');
       console.error(e);
     } finally {
       setLoading(false);
     }
   };
 
-  const loadAnswer = async () => {
+  const loadAnswer = () => {
     if (!challenge || answer) return;
     try {
-      const result = await getAnswer(challenge);
+      const result = getAnswer(challenge);
       setAnswer(result);
     } catch (e) {
       setError('Failed to load answer');
@@ -114,23 +140,23 @@ export default function ScalePractice() {
     }
   };
 
-  const handleShowKey = async () => {
-    if (!answer) await loadAnswer();
+  const handleShowKey = () => {
+    if (!answer) loadAnswer();
     setShowKey(!showKey);
   };
 
-  const handleShowPosition = async () => {
-    if (!answer) await loadAnswer();
+  const handleShowPosition = () => {
+    if (!answer) loadAnswer();
     setShowPosition(!showPosition);
   };
 
-  const handleShowShape = async () => {
-    if (!answer) await loadAnswer();
+  const handleShowShape = () => {
+    if (!answer) loadAnswer();
     setShowShape(!showShape);
   };
 
-  const toggleAll = async () => {
-    if (!answer) await loadAnswer();
+  const toggleAll = () => {
+    if (!answer) loadAnswer();
     const newState = !(showKey && showPosition && showShape);
     setShowKey(newState);
     setShowPosition(newState);
@@ -148,7 +174,7 @@ export default function ScalePractice() {
     );
   }
 
-  if (error) {
+  if (error && !challenge) {
     return (
       <div className="max-w-5xl mx-auto text-center">
         <div className="bg-gradient-to-br from-red-900/30 to-red-950/30 rounded-2xl shadow-2xl p-12 border-4 border-red-600">

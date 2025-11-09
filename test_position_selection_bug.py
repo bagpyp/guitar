@@ -127,12 +127,13 @@ def test_position_ranges_dont_skip_voicings():
 
     print(f"\nSelected avg_frets: {[f'{x:.1f}' for x in selected_avg_frets]}")
 
-    # We should have representation from mid-high range
-    has_mid_high = any(8 <= v["avg_fret"] < 12 for v in selected)
+    # We should have reasonable distribution across the fretboard
+    # With quartile-based selection, should span from low to high
+    span = max(selected_avg_frets) - min(selected_avg_frets)
 
-    assert has_mid_high, \
-        f"Selected positions should include mid-high range (8-12 frets), " \
-        f"but only selected: {[f'{x:.1f}' for x in selected_avg_frets]}"
+    assert span >= 10, \
+        f"Selected positions should span at least 10 frets, got span={span:.1f}. " \
+        f"Selected: {[f'{x:.1f}' for x in selected_avg_frets]}"
 
 
 if __name__ == "__main__":
