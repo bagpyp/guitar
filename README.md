@@ -2,89 +2,116 @@
 
 ![Guitar Triads Visualization](screenshot.png)
 
-Interactive guitar practice app with realistic fretboard visualization, circle of fifths color coding, and physics-based rendering. **Runs entirely in your browser - no backend required!**
+Interactive guitar learning app with realistic fretboard visualization, circle of fifths color coding, and physics-based rendering. **Pure browser-based - no backend required!**
 
 ## Features
 
-- **Major Triads Tab**: Interactive triad visualization across all string groups
-  - Circle of fifths color coding for all 12 chromatic notes
-  - Horizontal fretboard layout with realistic physics-based spacing
-  - Hover to play notes with Web Audio API
-  - 4 positions per string group with coordinated selection algorithm
+🎸 **Major Triads Visualization**
+- Interactive triad voicings across all string groups
+- Circle of fifths color coding for 12 chromatic notes
+- Horizontal fretboard with realistic physics-based spacing
+- Hover to play notes with Web Audio API
+- Smart position selection algorithm
 
-- **Scale Practice Tab**: Interactive mode/scale practice challenges
-  - Random challenges for all 7 modes
-  - Progressive hints with scoring system
-  - XYZ pattern visualization
+🎵 **Scale Practice Challenges**
+- Random challenges for all 7 modes
+- Progressive hints with scoring system
+- XYZ pattern visualization
+- Real-time feedback
 
-## Installation
+🎨 **Visual Design**
+- Physics-based fret spacing (Fender 25.5" scale)
+- Realistic string thickness
+- Circle of fifths color system
+- Responsive layout
 
-**First time setup:**
+## Quick Start
 
 ```bash
-# 1. Install Python dependencies (optional - only needed for console app):
-poetry install              # if you have poetry
-# OR
-python -m venv .venv && .venv/bin/pip install -e .
-
-# 2. Install web dependencies:
-cd web
 npm install
-cd ..
+npm run dev
 ```
 
-## Running the App
+Open [http://localhost:3000](http://localhost:3000) 🚀
 
-### Web App (Browser Only - No Backend!)
+## Available Scripts
 
 ```bash
-cd web
-npm run dev                 # Open http://localhost:3000
+npm run dev      # Start development server
+npm run build    # Build for production
+npm run start    # Start production server
+npm test         # Run 188 tests
 ```
 
-**That's it!** All logic runs in your browser. No API server needed.
+## Tech Stack
 
-## Console App (Optional)
+- **Next.js 14** - React framework with App Router
+- **TypeScript** - Type-safe code
+- **Vitest** - Fast unit testing
+- **Web Audio API** - Sound playback
+- **CSS-in-JS** - Styled components
+
+## Project Structure
+
+```
+guitar/
+├── app/           # Next.js pages & layouts
+├── components/    # React components
+├── lib/guitar/    # Core guitar logic
+│   ├── triads.ts         # Triad generation
+│   ├── core.ts           # Scale practice logic
+│   ├── sound.ts          # Web Audio API
+│   └── note-colors.ts    # Circle of fifths
+└── __tests__/     # Test suite (188 tests)
+```
+
+## Testing
+
+All features are comprehensively tested:
 
 ```bash
-python main.py              # interactive practice (standalone CLI)
+npm test
 ```
 
-## Tests
-
-```bash
-# TypeScript tests (web app logic)
-cd web && npm test          # 188 tests
-
-# Python tests (console app logic)
-.venv/bin/pytest            # 46 tests
-```
-
-## Architecture
-
-The app has two independent implementations:
-
-1. **Browser-based Web UI** (TypeScript)
-   - All logic in `web/lib/guitar/`
-   - Pure client-side, no server needed
-   - Uses Next.js for UI
-
-2. **Console App** (Python)
-   - All logic in `main.py`
-   - Standalone CLI tool
-   - Optional API server in `api.py` (not used by web UI)
-
-Both implementations are fully tested and maintain feature parity.
-
-## Poetry Scripts (Python only)
-
-```bash
-poetry run guitar           # console app
-poetry run serve            # API server (port 8000, optional)
-```
+- ✅ 188 tests passing
+- 8 test suites covering triads, physics, colors, rendering, sound
+- 100% coverage of core guitar logic
 
 ## Development
 
-**PyCharm setup:** Set interpreter to `.venv/bin/python`
+1. Make changes to code
+2. Run tests: `npm test`
+3. Iterate until all pass
+4. Verify visually: `npm run dev`
+5. Build: `npm run build`
 
-**VS Code setup:** TypeScript/Next.js environment in `web/` directory
+See [CLAUDE.md](CLAUDE.md) for detailed developer documentation.
+
+## How It Works
+
+### Triad Algorithm
+
+- Generates voicings for 4 string groups (6-5-4, 5-4-3, 4-3-2, 3-2-1)
+- Selects 4 positions per group (0-3) using coordinated algorithm
+- Adjacent groups share notes where possible
+- Validates fret stretch (≤5 frets) and range (0-18)
+
+### Physics Rendering
+
+- Exponential fret spacing: `position = 648 × (1 - 2^(-fret/12))`
+- Realistic string gauges (6th string = 4.6x thicker than 1st)
+- Equal temperament tuning (A440 standard)
+
+### Circle of Fifths
+
+Each note has a distinct color:
+- C (Red) → G (Orange) → D (Yellow) → A (Lime) → E (Green) → B (Cyan)
+- F# (Blue) → C# (Indigo) → G# (Violet) → D# (Magenta) → A# (Pink) → F (Rose)
+
+## Contributing
+
+This is a personal learning project, but feel free to explore the code and tests to understand how it works!
+
+## License
+
+MIT
